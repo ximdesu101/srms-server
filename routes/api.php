@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\SchoolFormTemplateController;
 use App\Http\Controllers\Admin\TeacherController;
 use App\Http\Controllers\Auth\AdminAuthController;
 use App\Http\Controllers\Auth\TeacherAuthController;
@@ -25,6 +26,14 @@ Route::prefix('admin/teachers')->middleware('auth:admin')->group(function () {
     Route::post('/', [TeacherController::class, 'store']);
     Route::put('/{teacher}', [TeacherController::class, 'update']);
     Route::delete('/{teacher}', [TeacherController::class, 'destroy']);
+});
+
+// School form templates (official Excel templates per SF1–SF10)
+Route::prefix('admin/school-forms')->middleware('auth:admin')->group(function () {
+    Route::get('/{formCode}/template', [SchoolFormTemplateController::class, 'show']);
+    Route::post('/{formCode}/template', [SchoolFormTemplateController::class, 'store']);
+    Route::get('/{formCode}/template/download', [SchoolFormTemplateController::class, 'download']);
+    Route::get('/{formCode}/template/preview', [SchoolFormTemplateController::class, 'preview']); // ← add this
 });
 
 /* ======================== Teacher Routes ======================== */
