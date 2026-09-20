@@ -11,7 +11,7 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         Admin::updateOrCreate(
-            ['username' => 'Admin@srms.tagnao'],
+            ['username' => 'admin'],
             ['password' => Hash::make('Admin123')]
         );
     }
