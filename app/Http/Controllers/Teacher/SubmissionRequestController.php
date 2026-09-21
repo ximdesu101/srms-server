@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Teacher;
 
 use App\Http\Controllers\Controller;
 use App\Models\Admin\SubmissionRequest;
+use Illuminate\Support\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -63,7 +64,7 @@ class SubmissionRequestController extends Controller
         }
 
         $submissionRequest->status = SubmissionRequest::STATUS_ACKNOWLEDGED;
-        $submissionRequest->acknowledged_at = now();
+        $submissionRequest->acknowledged_at = Carbon::now();
         $submissionRequest->save();
 
         return response()->json([
@@ -95,9 +96,9 @@ class SubmissionRequestController extends Controller
         }
 
         $submissionRequest->status = SubmissionRequest::STATUS_SUBMITTED;
-        $submissionRequest->submitted_at = now();
+        $submissionRequest->submitted_at = Carbon::now();
         if (! $submissionRequest->acknowledged_at) {
-            $submissionRequest->acknowledged_at = now();
+            $submissionRequest->acknowledged_at = Carbon::now();
         }
         $submissionRequest->save();
 
@@ -116,7 +117,7 @@ class SubmissionRequestController extends Controller
             'document_name' => $item->document_name,
             'notes' => $item->notes,
             'request_date' => $item->created_at?->toDateString(),
-            'due_date' => $item->due_date?->toDateString(),
+            'due_date' => $item->due_date ? Carbon::parse($item->due_date)->toDateString() : null,
             'status' => $item->status,
             'acknowledged_at' => $item->acknowledged_at?->toIso8601String(),
             'submitted_at' => $item->submitted_at?->toIso8601String(),

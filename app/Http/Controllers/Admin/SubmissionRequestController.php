@@ -7,6 +7,7 @@ use App\Models\Admin\SubmissionRequest;
 use App\Models\Admin\Teacher;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -237,7 +238,7 @@ class SubmissionRequestController extends Controller
         }
 
         $submissionRequest->status = SubmissionRequest::STATUS_CANCELLED;
-        $submissionRequest->cancelled_at = now();
+        $submissionRequest->cancelled_at = Carbon::now();
         $submissionRequest->save();
 
         $submissionRequest->load(['teacher:id,teacher_id,first_name,middle_name,last_name,suffix,username,position,class_advisory,status']);
