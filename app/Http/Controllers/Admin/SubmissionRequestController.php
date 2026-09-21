@@ -276,7 +276,7 @@ class SubmissionRequestController extends Controller
             'document_name' => $item->document_name,
             'notes' => $item->notes,
             'request_date' => $item->created_at?->toDateString(),
-            'due_date' => $item->due_date?->toDateString(),
+            'due_date' => $item->due_date ? Carbon::parse($item->due_date)->toDateString() : null,
             'status' => $item->status,
             'acknowledged_at' => $item->acknowledged_at?->toIso8601String(),
             'submitted_at' => $item->submitted_at?->toIso8601String(),
