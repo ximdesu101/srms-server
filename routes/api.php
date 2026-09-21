@@ -1,9 +1,11 @@
 <?php
 
 use App\Http\Controllers\Admin\SchoolFormTemplateController;
+use App\Http\Controllers\Admin\SubmissionRequestController as AdminSubmissionRequestController;
 use App\Http\Controllers\Admin\TeacherController;
 use App\Http\Controllers\Auth\AdminAuthController;
 use App\Http\Controllers\Auth\TeacherAuthController;
+use App\Http\Controllers\Teacher\SubmissionRequestController as TeacherSubmissionRequestController;
 use Illuminate\Support\Facades\Route;
 
 /* ======================== Admin Routes ======================== */
@@ -33,7 +35,17 @@ Route::prefix('admin/school-forms')->middleware('auth:admin')->group(function ()
     Route::get('/{formCode}/template', [SchoolFormTemplateController::class, 'show']);
     Route::post('/{formCode}/template', [SchoolFormTemplateController::class, 'store']);
     Route::get('/{formCode}/template/download', [SchoolFormTemplateController::class, 'download']);
-    Route::get('/{formCode}/template/preview', [SchoolFormTemplateController::class, 'preview']); // ← add this
+    Route::get('/{formCode}/template/preview', [SchoolFormTemplateController::class, 'preview']);
+});
+
+// Admin submission requests
+Route::prefix('admin/submission-requests')->middleware('auth:admin')->group(function () {
+    Route::get('/metrics', [AdminSubmissionRequestController::class, 'metrics']);
+    Route::get('/active-teachers', [AdminSubmissionRequestController::class, 'activeTeachers']);
+    Route::get('/', [AdminSubmissionRequestController::class, 'index']);
+    Route::post('/', [AdminSubmissionRequestController::class, 'store']);
+    Route::get('/{submissionRequest}', [AdminSubmissionRequestController::class, 'show']);
+    Route::post('/{submissionRequest}/cancel', [AdminSubmissionRequestController::class, 'cancel']);
 });
 
 /* ======================== Teacher Routes ======================== */
@@ -48,5 +60,10 @@ Route::prefix('teacher')->group(function () {
     Route::middleware('auth:teacher')->group(function () {
         Route::get('/me', [TeacherAuthController::class, 'me']);
         Route::post('/logout', [TeacherAuthController::class, 'logout']);
+
+        // Teacher submission requests
+        Route::get('/submission-requests', [TeacherSubmissionRequestController::class, 'index']);
+        Route::post('/submission-requests/{submissionRequest}/acknowledge', [TeacherSubmissionRequestController::class, 'acknowledge']);
+        Route::post('/submission-requests/{submissionRequest}/submit', [TeacherSubmissionRequestController::class, 'submit']);
     });
 });
