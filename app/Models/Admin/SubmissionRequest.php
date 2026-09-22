@@ -82,7 +82,7 @@ class SubmissionRequest extends Model
         if (
             in_array($this->status, [self::STATUS_REQUESTED, self::STATUS_ACKNOWLEDGED], true)
             && $this->due_date
-            && $this->due_date->copy()->endOfDay()->isPast()
+            && now()->toDateString() > (string) $this->due_date
         ) {
             $this->status = self::STATUS_OVERDUE;
             $this->saveQuietly();
