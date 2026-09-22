@@ -25,4 +25,9 @@ class Admin extends Authenticatable
             'password' => 'hashed',
         ];
     }
+
+    public function notifications()
+    {
+        return $this->morphMany(\App\Models\Notification::class, 'notifiable')->orderByDesc('created_at');
+    }
 }

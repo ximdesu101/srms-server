@@ -57,6 +57,11 @@ class SubmissionRequest extends Model
         return $this->belongsTo(Admin::class);
     }
 
+    public function documentSubmission()
+    {
+        return $this->hasOne(DocumentSubmission::class);
+    }
+
     /**
      * Apply overdue status when due date has passed and request is still open.
      */

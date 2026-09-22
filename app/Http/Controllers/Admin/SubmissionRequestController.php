@@ -184,7 +184,7 @@ class SubmissionRequestController extends Controller
 
         try {
             $submissionRequest = DB::transaction(function () use ($data, $teacher, $admin) {
-                return SubmissionRequest::create([
+                $sr = SubmissionRequest::create([
                     'request_code' => SubmissionRequest::generateRequestCode(),
                     'admin_id' => $admin->id,
                     'teacher_id' => $teacher->id,
@@ -194,6 +194,23 @@ class SubmissionRequestController extends Controller
                     'due_date' => $data['dueDate'],
                     'status' => SubmissionRequest::STATUS_REQUESTED,
                 ]);
+
+                \App\Services\NotificationService::notify(
+                    $teacher,
+                    \App\Models\Notification::TYPE_NEW_SUBMISSION_REQUEST,
+                    'New Submission Request',
+                    'You have received a new document submission request from the administrator.',
+                    [
+                        'request_id' => $sr->id,
+                        'request_code' => $sr->request_code,
+                        'document_code' => $sr->document_code,
+                        'document_name' => $sr->document_name,
+                        'due_date' => $sr->due_date?->toDateString(),
+                        'link' => '/submission-requests/' . $sr->id,
+                    ]
+                );
+
+                return $sr;
             });
         } catch (\Throwable $e) {
             return response()->json([
