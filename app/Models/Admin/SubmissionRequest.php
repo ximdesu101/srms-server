@@ -9,6 +9,7 @@ class SubmissionRequest extends Model
 {
     use HasFactory;
 
+    public const STATUS_DRAFT = 'Draft';
     public const STATUS_REQUESTED = 'Requested';
     public const STATUS_ACKNOWLEDGED = 'Acknowledged';
     public const STATUS_SUBMITTED = 'Submitted';
@@ -16,6 +17,16 @@ class SubmissionRequest extends Model
     public const STATUS_CANCELLED = 'Cancelled';
 
     public const STATUSES = [
+        self::STATUS_DRAFT,
+        self::STATUS_REQUESTED,
+        self::STATUS_ACKNOWLEDGED,
+        self::STATUS_SUBMITTED,
+        self::STATUS_OVERDUE,
+        self::STATUS_CANCELLED,
+    ];
+
+    /** Statuses visible to teachers (never drafts). */
+    public const TEACHER_VISIBLE_STATUSES = [
         self::STATUS_REQUESTED,
         self::STATUS_ACKNOWLEDGED,
         self::STATUS_SUBMITTED,
@@ -64,11 +75,13 @@ class SubmissionRequest extends Model
 
     /**
      * Apply overdue status when due date has passed and request is still open.
+     * Drafts are never marked overdue.
      */
     public function refreshOverdueStatus(): void
     {
         if (
             in_array($this->status, [self::STATUS_REQUESTED, self::STATUS_ACKNOWLEDGED], true)
+            && $this->due_date
             && $this->due_date->copy()->endOfDay()->isPast()
         ) {
             $this->status = self::STATUS_OVERDUE;

@@ -47,6 +47,7 @@ Route::prefix('admin/submission-requests')->middleware('auth:admin')->group(func
     Route::get('/', [AdminSubmissionRequestController::class, 'index']);
     Route::post('/', [AdminSubmissionRequestController::class, 'store']);
     Route::get('/{submissionRequest}', [AdminSubmissionRequestController::class, 'show']);
+    Route::put('/{submissionRequest}', [AdminSubmissionRequestController::class, 'update']);
     Route::post('/{submissionRequest}/cancel', [AdminSubmissionRequestController::class, 'cancel']);
 });
 

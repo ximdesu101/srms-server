@@ -67,7 +67,6 @@ class SubmissionRequestController extends Controller
 
         $requests = $query->paginate(10);
 
-        // Refresh overdue status for items on this page that may have become overdue
         foreach ($requests->items() as $item) {
             $item->refreshOverdueStatus();
         }
@@ -84,13 +83,13 @@ class SubmissionRequestController extends Controller
      */
     public function metrics(): JsonResponse
     {
-        // Mark overdue in bulk for open requests past due
         SubmissionRequest::query()
             ->whereIn('status', [SubmissionRequest::STATUS_REQUESTED, SubmissionRequest::STATUS_ACKNOWLEDGED])
             ->whereDate('due_date', '<', now()->toDateString())
             ->update(['status' => SubmissionRequest::STATUS_OVERDUE]);
 
-        $total = SubmissionRequest::count();
+        $total = SubmissionRequest::where('status', '!=', SubmissionRequest::STATUS_DRAFT)->count();
+        $draft = SubmissionRequest::where('status', SubmissionRequest::STATUS_DRAFT)->count();
         $requested = SubmissionRequest::where('status', SubmissionRequest::STATUS_REQUESTED)->count();
         $acknowledged = SubmissionRequest::where('status', SubmissionRequest::STATUS_ACKNOWLEDGED)->count();
         $submitted = SubmissionRequest::where('status', SubmissionRequest::STATUS_SUBMITTED)->count();
@@ -99,6 +98,7 @@ class SubmissionRequestController extends Controller
 
         return response()->json([
             'total' => $total,
+            'draft' => $draft,
             'requested' => $requested,
             'acknowledged' => $acknowledged,
             'submitted' => $submitted,
@@ -108,7 +108,7 @@ class SubmissionRequestController extends Controller
     }
 
     /**
-     * Active registered teachers for the combobox.
+     * Active registered teachers for the combobox / multi-select.
      */
     public function activeTeachers(Request $request): JsonResponse
     {
@@ -152,16 +152,185 @@ class SubmissionRequestController extends Controller
     }
 
     /**
-     * Create a submission request.
+     * Create one or more submission requests (send or save as draft).
+     *
+     * Accepts:
+     * - teacherIds: array of active teacher primary keys (required, min 1)
+     * - documentCode: string (required)
+     * - dueDate: date (required when sending; optional when draft)
+     * - notes: nullable string
+     * - isDraft: boolean (default false)
      */
     public function store(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'teacherId' => 'required|integer|exists:teachers,id',
+        $isDraft = filter_var($request->input('isDraft', false), FILTER_VALIDATE_BOOLEAN);
+
+        $rules = [
+            'teacherIds' => 'required|array|min:1',
+            'teacherIds.*' => 'integer|distinct',
             'documentCode' => ['required', 'string', Rule::in(array_keys(self::DOCUMENT_MAP))],
-            'dueDate' => 'required|date|after_or_equal:today',
             'notes' => 'nullable|string|max:300',
-        ]);
+            'isDraft' => 'sometimes|boolean',
+        ];
+
+        if ($isDraft) {
+            $rules['dueDate'] = 'nullable|date|after_or_equal:today';
+        } else {
+            $rules['dueDate'] = 'required|date|after_or_equal:today';
+        }
+
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $data = $validator->validated();
+        $teacherIds = array_values(array_unique($data['teacherIds']));
+
+        $teachers = Teacher::query()
+            ->whereIn('id', $teacherIds)
+            ->where('status', 'active')
+            ->get();
+
+        if ($teachers->count() !== count($teacherIds)) {
+            return response()->json([
+                'message' => 'One or more selected teachers are not active registered accounts.',
+                'errors' => [
+                    'teacherIds' => ['One or more selected teachers are invalid or inactive.'],
+                ],
+            ], 422);
+        }
+
+        $admin = $request->user('admin');
+        if (! $admin) {
+            return response()->json(['message' => 'Unauthorized.'], 401);
+        }
+
+        $status = $isDraft
+            ? SubmissionRequest::STATUS_DRAFT
+            : SubmissionRequest::STATUS_REQUESTED;
+
+        $documentCode = $data['documentCode'];
+        $documentName = self::DOCUMENT_MAP[$documentCode];
+        $notes = $data['notes'] ?? null;
+        $dueDate = $data['dueDate'] ?? null;
+
+        try {
+            $created = DB::transaction(function () use (
+                $teachers,
+                $admin,
+                $status,
+                $documentCode,
+                $documentName,
+                $notes,
+                $dueDate,
+                $isDraft
+            ) {
+                $items = [];
+
+                foreach ($teachers as $teacher) {
+                    $sr = SubmissionRequest::create([
+                        'request_code' => SubmissionRequest::generateRequestCode(),
+                        'admin_id' => $admin->id,
+                        'teacher_id' => $teacher->id,
+                        'document_code' => $documentCode,
+                        'document_name' => $documentName,
+                        'notes' => $notes,
+                        'due_date' => $dueDate ?? now()->toDateString(),
+                        'status' => $status,
+                    ]);
+
+                    if (! $isDraft) {
+                        \App\Services\NotificationService::notify(
+                            $teacher,
+                            \App\Models\Notification::TYPE_NEW_SUBMISSION_REQUEST,
+                            'New Submission Request',
+                            'You have received a new document submission request from the administrator.',
+                            [
+                                'request_id' => $sr->id,
+                                'request_code' => $sr->request_code,
+                                'document_code' => $sr->document_code,
+                                'document_name' => $sr->document_name,
+                                'due_date' => $sr->due_date instanceof \DateTimeInterface
+                                    ? $sr->due_date->format('Y-m-d')
+                                    : $sr->due_date,
+                                'link' => '/submission-requests/' . $sr->id,
+                            ]
+                        );
+                    }
+
+                    $items[] = $sr;
+                }
+
+                return $items;
+            });
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => $isDraft
+                    ? 'Failed to save draft. Please try again.'
+                    : 'Failed to send submission request. Please try again.',
+            ], 500);
+        }
+
+        foreach ($created as $sr) {
+            $sr->load(['teacher:id,teacher_id,first_name,middle_name,last_name,suffix,username,position,class_advisory,status']);
+        }
+
+        $formatted = array_map(fn (SubmissionRequest $sr) => $this->formatRequest($sr), $created);
+
+        return response()->json([
+            'message' => $isDraft
+                ? (count($created) === 1
+                    ? 'Draft saved successfully.'
+                    : count($created) . ' drafts saved successfully.')
+                : (count($created) === 1
+                    ? 'Submission request sent successfully.'
+                    : count($created) . ' submission requests sent successfully.'),
+            'requests' => $formatted,
+            'request' => $formatted[0] ?? null,
+        ], 201);
+    }
+
+    /**
+     * Update a draft request, or send an existing draft.
+     */
+    public function update(Request $request, SubmissionRequest $submissionRequest): JsonResponse
+    {
+        $admin = $request->user('admin');
+        if (! $admin) {
+            return response()->json(['message' => 'Unauthorized.'], 401);
+        }
+
+        if ((int) $submissionRequest->admin_id !== (int) $admin->id) {
+            return response()->json(['message' => 'You are not authorized to modify this request.'], 403);
+        }
+
+        if ($submissionRequest->status !== SubmissionRequest::STATUS_DRAFT) {
+            return response()->json([
+                'message' => 'Only draft requests can be updated.',
+            ], 422);
+        }
+
+        $isDraft = filter_var($request->input('isDraft', true), FILTER_VALIDATE_BOOLEAN);
+
+        $rules = [
+            'teacherId' => 'sometimes|integer',
+            'documentCode' => ['sometimes', 'string', Rule::in(array_keys(self::DOCUMENT_MAP))],
+            'notes' => 'nullable|string|max:300',
+            'isDraft' => 'sometimes|boolean',
+        ];
+
+        if ($isDraft) {
+            $rules['dueDate'] = 'nullable|date|after_or_equal:today';
+        } else {
+            $rules['dueDate'] = 'required|date|after_or_equal:today';
+        }
+
+        $validator = Validator::make($request->all(), $rules);
 
         if ($validator->fails()) {
             return response()->json([
@@ -172,58 +341,89 @@ class SubmissionRequestController extends Controller
 
         $data = $validator->validated();
 
-        $teacher = Teacher::find($data['teacherId']);
+        if (isset($data['teacherId'])) {
+            $teacher = Teacher::find($data['teacherId']);
+            if (! $teacher || $teacher->status !== 'active') {
+                return response()->json([
+                    'message' => 'Selected teacher is not an active registered account.',
+                    'errors' => [
+                        'teacherId' => ['Selected teacher is invalid or inactive.'],
+                    ],
+                ], 422);
+            }
+            $submissionRequest->teacher_id = $teacher->id;
+        } else {
+            $teacher = $submissionRequest->teacher;
+            if (! $teacher || $teacher->status !== 'active') {
+                return response()->json([
+                    'message' => 'The assigned teacher is no longer an active registered account.',
+                ], 422);
+            }
+        }
 
-        if (! $teacher || $teacher->status !== 'active') {
+        if (isset($data['documentCode'])) {
+            $submissionRequest->document_code = $data['documentCode'];
+            $submissionRequest->document_name = self::DOCUMENT_MAP[$data['documentCode']];
+        }
+
+        if (array_key_exists('notes', $data)) {
+            $submissionRequest->notes = $data['notes'];
+        }
+
+        if (isset($data['dueDate'])) {
+            $submissionRequest->due_date = $data['dueDate'];
+        }
+
+        if (! $isDraft && ! $submissionRequest->due_date) {
             return response()->json([
-                'message' => 'Selected teacher is not an active registered account.',
+                'message' => 'Validation failed',
+                'errors' => [
+                    'dueDate' => ['A due date is required when sending a request.'],
+                ],
             ], 422);
         }
 
-        $admin = $request->user('admin');
-
         try {
-            $submissionRequest = DB::transaction(function () use ($data, $teacher, $admin) {
-                $sr = SubmissionRequest::create([
-                    'request_code' => SubmissionRequest::generateRequestCode(),
-                    'admin_id' => $admin->id,
-                    'teacher_id' => $teacher->id,
-                    'document_code' => $data['documentCode'],
-                    'document_name' => self::DOCUMENT_MAP[$data['documentCode']],
-                    'notes' => $data['notes'] ?? null,
-                    'due_date' => $data['dueDate'],
-                    'status' => SubmissionRequest::STATUS_REQUESTED,
-                ]);
+            DB::transaction(function () use ($submissionRequest, $isDraft, $teacher) {
+                if ($isDraft) {
+                    $submissionRequest->status = SubmissionRequest::STATUS_DRAFT;
+                    $submissionRequest->save();
+                } else {
+                    $submissionRequest->status = SubmissionRequest::STATUS_REQUESTED;
+                    $submissionRequest->save();
 
-                \App\Services\NotificationService::notify(
-                    $teacher,
-                    \App\Models\Notification::TYPE_NEW_SUBMISSION_REQUEST,
-                    'New Submission Request',
-                    'You have received a new document submission request from the administrator.',
-                    [
-                        'request_id' => $sr->id,
-                        'request_code' => $sr->request_code,
-                        'document_code' => $sr->document_code,
-                        'document_name' => $sr->document_name,
-                        'due_date' => $sr->due_date?->toDateString(),
-                        'link' => '/submission-requests/' . $sr->id,
-                    ]
-                );
-
-                return $sr;
+                    \App\Services\NotificationService::notify(
+                        $teacher,
+                        \App\Models\Notification::TYPE_NEW_SUBMISSION_REQUEST,
+                        'New Submission Request',
+                        'You have received a new document submission request from the administrator.',
+                        [
+                            'request_id' => $submissionRequest->id,
+                            'request_code' => $submissionRequest->request_code,
+                            'document_code' => $submissionRequest->document_code,
+                            'document_name' => $submissionRequest->document_name,
+                            'due_date' => $submissionRequest->due_date
+                                ? date('Y-m-d', strtotime((string) $submissionRequest->due_date))
+                                : null,
+                            'link' => '/submission-requests/' . $submissionRequest->id,
+                        ]
+                    );
+                }
             });
         } catch (\Throwable $e) {
             return response()->json([
-                'message' => 'Failed to send submission request. Please try again.',
+                'message' => 'Failed to update request. Please try again.',
             ], 500);
         }
 
         $submissionRequest->load(['teacher:id,teacher_id,first_name,middle_name,last_name,suffix,username,position,class_advisory,status']);
 
         return response()->json([
-            'message' => 'Submission request sent successfully.',
+            'message' => $isDraft
+                ? 'Draft updated successfully.'
+                : 'Submission request sent successfully.',
             'request' => $this->formatRequest($submissionRequest),
-        ], 201);
+        ]);
     }
 
     /**
@@ -245,6 +445,7 @@ class SubmissionRequestController extends Controller
     public function cancel(SubmissionRequest $submissionRequest): JsonResponse
     {
         if (! in_array($submissionRequest->status, [
+            SubmissionRequest::STATUS_DRAFT,
             SubmissionRequest::STATUS_REQUESTED,
             SubmissionRequest::STATUS_ACKNOWLEDGED,
             SubmissionRequest::STATUS_OVERDUE,

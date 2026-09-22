@@ -39,6 +39,7 @@ class SubmissionRequestController extends Controller
 
         $query = SubmissionRequest::query()
             ->where('teacher_id', $teacher->id)
+            ->where('status', '!=', SubmissionRequest::STATUS_DRAFT)
             ->with(['documentSubmission', 'admin:id,username'])
             ->orderByDesc('created_at');
 
@@ -64,6 +65,10 @@ class SubmissionRequestController extends Controller
         $teacher = $request->user('teacher');
 
         if ($submissionRequest->teacher_id !== $teacher->id) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        if ($submissionRequest->status === SubmissionRequest::STATUS_DRAFT) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -195,9 +200,9 @@ class SubmissionRequestController extends Controller
                 ]);
 
                 $submissionRequest->status = SubmissionRequest::STATUS_SUBMITTED;
-                $submissionRequest->submitted_at = now();
+                $submissionRequest->submitted_at = Carbon::now();
                 if (! $submissionRequest->acknowledged_at) {
-                    $submissionRequest->acknowledged_at = now();
+                    $submissionRequest->acknowledged_at = new Carbon();
                 }
                 $submissionRequest->save();
 
