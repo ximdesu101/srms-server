@@ -130,9 +130,13 @@ class SubmissionRequestController extends Controller
         }
 
         $existing = DocumentSubmission::where('submission_request_id', $submissionRequest->id)->first();
-        if ($existing && ! in_array($existing->status, [
-            DocumentSubmission::STATUS_REVISION_REQUIRED,
-        ], true)) {
+        if ($existing) {
+            if ($existing->status === DocumentSubmission::STATUS_REVISION_REQUIRED) {
+                return response()->json([
+                    'message' => 'This request requires a revised document. Please use the resubmit action.',
+                ], 422);
+            }
+
             return response()->json([
                 'message' => 'A document has already been submitted for this request.',
             ], 422);
@@ -299,7 +303,7 @@ class SubmissionRequestController extends Controller
                     'mime_type' => $file->getMimeType(),
                     'file_size' => $file->getSize(),
                     'status' => DocumentSubmission::STATUS_RESUBMITTED,
-                    'revision_count' => $documentSubmission->revision_count + 1,
+                    // revision_count is incremented only when admin requests revision, not on resubmit
                     'revision_note' => null,
                     'submitted_at' => now(),
                     'reviewed_at' => null,
@@ -380,6 +384,9 @@ class SubmissionRequestController extends Controller
             'id' => $sub->id,
             'submission_code' => $sub->submission_code,
             'original_name' => $sub->original_name,
+            'file_url' => $sub->file_path
+                ? asset('storage/' . ltrim($sub->file_path, '/'))
+                : null,
             'file_size' => $sub->file_size,
             'formatted_size' => $sub->formatted_size,
             'mime_type' => $sub->mime_type,
@@ -395,6 +402,9 @@ class SubmissionRequestController extends Controller
             $data['versions'] = $sub->versions->map(fn ($v) => [
                 'version_number' => $v->version_number,
                 'original_name' => $v->original_name,
+                'file_url' => $v->file_path
+                    ? asset('storage/' . ltrim($v->file_path, '/'))
+                    : null,
                 'status' => $v->status,
                 'revision_note' => $v->revision_note,
                 'submitted_at' => $v->submitted_at?->toIso8601String(),

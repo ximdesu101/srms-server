@@ -63,6 +63,8 @@ class SubmissionRequestController extends Controller
 
         if ($status && $status !== 'All' && in_array($status, SubmissionRequest::STATUSES, true)) {
             $query->where('status', $status);
+        } else {
+            $query->where('status', '!=', SubmissionRequest::STATUS_DRAFT);
         }
 
         $requests = $query->paginate(10);

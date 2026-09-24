@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DocumentSubmissionController extends Controller
@@ -108,17 +109,10 @@ class DocumentSubmissionController extends Controller
                 'revision_note' => null,
             ]);
 
-            DocumentSubmissionVersion::create([
-                'document_submission_id' => $documentSubmission->id,
-                'version_number' => $documentSubmission->versions()->count() + 1,
-                'original_name' => $documentSubmission->original_name,
-                'stored_name' => $documentSubmission->stored_name,
-                'file_path' => $documentSubmission->file_path,
-                'mime_type' => $documentSubmission->mime_type,
-                'file_size' => $documentSubmission->file_size,
-                'status' => DocumentSubmission::STATUS_APPROVED,
-                'submitted_at' => $documentSubmission->submitted_at,
-            ]);
+            DocumentSubmissionVersion::where('document_submission_id', $documentSubmission->id)
+                ->orderByDesc('version_number')
+                ->limit(1)
+                ->update(['status' => DocumentSubmission::STATUS_APPROVED]);
 
             $teacher = $documentSubmission->teacher;
             $sr = $documentSubmission->submissionRequest;
@@ -178,6 +172,7 @@ class DocumentSubmissionController extends Controller
                 'status' => DocumentSubmission::STATUS_REVISION_REQUIRED,
                 'admin_id' => $admin->id,
                 'revision_note' => $note,
+                'revision_count' => (int) $documentSubmission->revision_count + 1,
                 'reviewed_at' => now(),
             ]);
 
@@ -222,15 +217,18 @@ class DocumentSubmissionController extends Controller
         ]);
     }
 
-    public function download(DocumentSubmission $documentSubmission): StreamedResponse|JsonResponse
+    public function download(DocumentSubmission $documentSubmission): BinaryFileResponse|JsonResponse
     {
-        if (! $documentSubmission->file_path || ! Storage::disk('public')->exists($documentSubmission->file_path)) {
+        $filePath = $documentSubmission->getAttribute('file_path');
+        $originalName = $documentSubmission->getAttribute('original_name');
+
+        if (!is_string($filePath) || $filePath === '' || !Storage::disk('public')->exists($filePath)) {
             return response()->json(['message' => 'File not found.'], 404);
         }
 
-        return Storage::disk('public')->download(
-            $documentSubmission->file_path,
-            $documentSubmission->original_name
+        return response()->download(
+            Storage::disk('public')->path($filePath),
+            is_string($originalName) && $originalName !== '' ? $originalName : basename($filePath)
         );
     }
 
@@ -262,6 +260,9 @@ class DocumentSubmissionController extends Controller
             'document_code' => $sr?->document_code,
             'document_name' => $sr?->document_name,
             'original_name' => $item->original_name,
+            'file_url' => $item->file_path
+                ? asset('storage/' . ltrim($item->file_path, '/'))
+                : null,
             'formatted_size' => $item->formatted_size,
             'mime_type' => $item->mime_type,
             'status' => $item->status,
@@ -277,6 +278,9 @@ class DocumentSubmissionController extends Controller
             $data['versions'] = $item->versions->map(fn ($v) => [
                 'version_number' => $v->version_number,
                 'original_name' => $v->original_name,
+                'file_url' => $v->file_path
+                    ? asset('storage/' . ltrim($v->file_path, '/'))
+                    : null,
                 'status' => $v->status,
                 'revision_note' => $v->revision_note,
                 'submitted_at' => $v->submitted_at?->toIso8601String(),
