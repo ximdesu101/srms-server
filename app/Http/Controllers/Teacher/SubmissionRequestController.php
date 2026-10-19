@@ -43,7 +43,19 @@ class SubmissionRequestController extends Controller
             ->with(['documentSubmission', 'admin:id,username'])
             ->orderByDesc('created_at');
 
-        if ($status && $status !== 'All' && in_array($status, SubmissionRequest::STATUSES, true)) {
+        if ($status === 'Needs Revision') {
+            $query->whereHas('documentSubmission', function ($submissionQuery) {
+                $submissionQuery->where('status', DocumentSubmission::STATUS_REVISION_REQUIRED);
+            });
+        } elseif ($status === 'Awaiting Approval') {
+            $query->whereHas('documentSubmission', function ($submissionQuery) {
+                $submissionQuery->whereIn('status', [
+                    DocumentSubmission::STATUS_SUBMITTED,
+                    DocumentSubmission::STATUS_UNDER_REVIEW,
+                    DocumentSubmission::STATUS_RESUBMITTED,
+                ]);
+            });
+        } elseif ($status && $status !== 'All' && in_array($status, SubmissionRequest::STATUSES, true)) {
             $query->where('status', $status);
         }
 
@@ -293,9 +305,16 @@ class SubmissionRequestController extends Controller
         $ext = strtolower($file->getClientOriginalExtension());
         $storedName = Str::uuid()->toString() . '.' . $ext;
         $path = $file->storeAs('submissions/' . $teacher->id, $storedName, 'public');
+        $previousPath = $documentSubmission->file_path;
+        $previousPaths = $documentSubmission->versions()
+            ->pluck('file_path')
+            ->filter()
+            ->unique();
 
         try {
             $result = DB::transaction(function () use ($documentSubmission, $teacher, $file, $path, $storedName) {
+                $versionNumber = (int) $documentSubmission->revision_count + 1;
+
                 $documentSubmission->update([
                     'original_name' => $file->getClientOriginalName(),
                     'stored_name' => $storedName,
@@ -309,9 +328,10 @@ class SubmissionRequestController extends Controller
                     'reviewed_at' => null,
                 ]);
 
+                $documentSubmission->versions()->delete();
                 DocumentSubmissionVersion::create([
                     'document_submission_id' => $documentSubmission->id,
-                    'version_number' => $documentSubmission->versions()->count() + 1,
+                    'version_number' => $versionNumber,
                     'original_name' => $documentSubmission->original_name,
                     'stored_name' => $documentSubmission->stored_name,
                     'file_path' => $documentSubmission->file_path,
@@ -348,6 +368,11 @@ class SubmissionRequestController extends Controller
             return response()->json([
                 'message' => 'Failed to resubmit document. Please try again.',
             ], 500);
+        }
+
+        $obsoletePaths = $previousPaths->push($previousPath)->filter()->unique()->reject(fn($oldPath) => $oldPath === $path);
+        foreach ($obsoletePaths as $obsoletePath) {
+            Storage::disk('public')->delete($obsoletePath);
         }
 
         return response()->json([

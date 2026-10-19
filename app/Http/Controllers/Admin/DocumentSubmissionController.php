@@ -99,8 +99,16 @@ class DocumentSubmissionController extends Controller
         }
 
         $admin = $request->user('admin');
+        $versions = $documentSubmission->versions()->get();
+        $latestVersion = $versions->sortByDesc('version_number')->first();
+        $obsoletePaths = $versions
+            ->where('file_path', '!=', $documentSubmission->file_path)
+            ->pluck('file_path')
+            ->filter()
+            ->unique()
+            ->values();
 
-        DB::transaction(function () use ($documentSubmission, $admin) {
+        DB::transaction(function () use ($documentSubmission, $admin, $latestVersion) {
             $documentSubmission->update([
                 'status' => DocumentSubmission::STATUS_APPROVED,
                 'admin_id' => $admin->id,
@@ -109,10 +117,12 @@ class DocumentSubmissionController extends Controller
                 'revision_note' => null,
             ]);
 
-            DocumentSubmissionVersion::where('document_submission_id', $documentSubmission->id)
-                ->orderByDesc('version_number')
-                ->limit(1)
-                ->update(['status' => DocumentSubmission::STATUS_APPROVED]);
+            if ($latestVersion) {
+                DocumentSubmissionVersion::where('document_submission_id', $documentSubmission->id)
+                    ->where('id', '!=', $latestVersion->id)
+                    ->delete();
+                $latestVersion->update(['status' => DocumentSubmission::STATUS_APPROVED]);
+            }
 
             $teacher = $documentSubmission->teacher;
             $sr = $documentSubmission->submissionRequest;
@@ -132,6 +142,10 @@ class DocumentSubmissionController extends Controller
                 );
             }
         });
+
+        foreach ($obsoletePaths as $obsoletePath) {
+            Storage::disk('public')->delete($obsoletePath);
+        }
 
         $documentSubmission->load(['teacher', 'submissionRequest', 'versions']);
 
@@ -176,18 +190,15 @@ class DocumentSubmissionController extends Controller
                 'reviewed_at' => now(),
             ]);
 
-            DocumentSubmissionVersion::create([
-                'document_submission_id' => $documentSubmission->id,
-                'version_number' => $documentSubmission->versions()->count() + 1,
-                'original_name' => $documentSubmission->original_name,
-                'stored_name' => $documentSubmission->stored_name,
-                'file_path' => $documentSubmission->file_path,
-                'mime_type' => $documentSubmission->mime_type,
-                'file_size' => $documentSubmission->file_size,
-                'status' => DocumentSubmission::STATUS_REVISION_REQUIRED,
-                'revision_note' => $note,
-                'submitted_at' => $documentSubmission->submitted_at,
-            ]);
+            $latestVersion = DocumentSubmissionVersion::where('document_submission_id', $documentSubmission->id)
+                ->orderByDesc('version_number')
+                ->first();
+            if ($latestVersion) {
+                $latestVersion->update([
+                    'status' => DocumentSubmission::STATUS_REVISION_REQUIRED,
+                    'revision_note' => $note,
+                ]);
+            }
 
             $teacher = $documentSubmission->teacher;
             $sr = $documentSubmission->submissionRequest;
