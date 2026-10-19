@@ -21,6 +21,7 @@ class DocumentSubmissionController extends Controller
     {
         $search = $request->query('search');
         $status = $request->query('status');
+        $documentCode = $request->query('document_code');
 
         $query = DocumentSubmission::query()
             ->with([
@@ -47,6 +48,13 @@ class DocumentSubmissionController extends Controller
 
         if ($status && $status !== 'All' && in_array($status, DocumentSubmission::STATUSES, true)) {
             $query->where('status', $status);
+        }
+
+        if ($documentCode) {
+            $documentCode = strtoupper(trim((string) $documentCode));
+            $query->whereHas('submissionRequest', function ($rq) use ($documentCode) {
+                $rq->where('document_code', $documentCode);
+            });
         }
 
         $submissions = $query->paginate(10);
