@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Admin\DocumentSubmission;
 use App\Models\Admin\SchoolFormTemplate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -38,6 +39,42 @@ class SchoolFormTemplateController extends Controller
     ];
 
     private const ALLOWED_EXTENSIONS = ['xlsx', 'xls'];
+
+
+    /**
+     * GET /admin/school-forms/summary
+     * Returns per-form approved file counts and template metadata for the School Forms cards.
+     */
+    public function summary(): JsonResponse
+    {
+        $templates = SchoolFormTemplate::query()
+            ->whereIn('form_code', self::ALLOWED_FORM_CODES)
+            ->get()
+            ->keyBy('form_code');
+
+        $approvedCounts = DocumentSubmission::query()
+            ->where('status', DocumentSubmission::STATUS_APPROVED)
+            ->join('submission_requests', 'document_submissions.submission_request_id', '=', 'submission_requests.id')
+            ->whereIn('submission_requests.document_code', self::ALLOWED_FORM_CODES)
+            ->selectRaw('submission_requests.document_code as document_code, COUNT(document_submissions.id) as total')
+            ->groupBy('submission_requests.document_code')
+            ->pluck('total', 'document_code');
+
+        $forms = [];
+        foreach (self::ALLOWED_FORM_CODES as $code) {
+            $template = $templates->get($code);
+            $forms[] = [
+                'form_code' => $code,
+                'approved_count' => (int) ($approvedCounts[$code] ?? 0),
+                'template_count' => $template ? 1 : 0,
+                'has_template' => (bool) $template,
+                'last_updated' => $template?->updated_at?->format('M. j, Y'),
+                'last_updated_iso' => $template?->updated_at?->toIso8601String(),
+            ];
+        }
+
+        return response()->json(['forms' => $forms]);
+    }
 
     /**
      * GET /admin/school-forms/{formCode}/template
