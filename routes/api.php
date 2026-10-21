@@ -35,8 +35,10 @@ Route::prefix('admin/teachers')->middleware('auth:admin')->group(function () {
 // School form templates (official Excel templates per SF1–SF10)
 Route::prefix('admin/school-forms')->middleware('auth:admin')->group(function () {
     Route::get('/summary', [SchoolFormTemplateController::class, 'summary']);
+    Route::get('/{formCode}/templates', [SchoolFormTemplateController::class, 'index']);
     Route::get('/{formCode}/template', [SchoolFormTemplateController::class, 'show']);
     Route::post('/{formCode}/template', [SchoolFormTemplateController::class, 'store']);
+    Route::post('/{formCode}/templates/{id}/activate', [SchoolFormTemplateController::class, 'activate']);
     Route::get('/{formCode}/template/download', [SchoolFormTemplateController::class, 'download']);
     Route::get('/{formCode}/template/preview', [SchoolFormTemplateController::class, 'preview']);
 });

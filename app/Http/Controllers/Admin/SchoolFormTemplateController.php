@@ -7,6 +7,7 @@ use App\Models\Admin\DocumentSubmission;
 use App\Models\Admin\SchoolFormTemplate;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
@@ -44,10 +45,12 @@ class SchoolFormTemplateController extends Controller
     /**
      * GET /admin/school-forms/summary
      * Returns per-form approved file counts and template metadata for the School Forms cards.
+     * Uses the current (active) template only.
      */
     public function summary(): JsonResponse
     {
         $templates = SchoolFormTemplate::query()
+            ->current()
             ->whereIn('form_code', self::ALLOWED_FORM_CODES)
             ->get()
             ->keyBy('form_code');
@@ -77,7 +80,32 @@ class SchoolFormTemplateController extends Controller
     }
 
     /**
+     * GET /admin/school-forms/{formCode}/templates
+     * List all templates (current + archived) for a form, newest first.
+     */
+    public function index(string $formCode): JsonResponse
+    {
+        $formCode = strtoupper($formCode);
+
+        if (!in_array($formCode, self::ALLOWED_FORM_CODES, true)) {
+            return response()->json(['message' => 'Invalid form code.'], 422);
+        }
+
+        $templates = SchoolFormTemplate::query()
+            ->where('form_code', $formCode)
+            ->orderByRaw("CASE WHEN status = 'current' THEN 0 ELSE 1 END")
+            ->orderByDesc('created_at')
+            ->get()
+            ->map(fn (SchoolFormTemplate $t) => $this->formatTemplate($t));
+
+        return response()->json([
+            'templates' => $templates,
+        ]);
+    }
+
+    /**
      * GET /admin/school-forms/{formCode}/template
+     * Returns the current active template metadata.
      */
     public function show(string $formCode): JsonResponse
     {
@@ -87,7 +115,7 @@ class SchoolFormTemplateController extends Controller
             return response()->json(['message' => 'Invalid form code.'], 422);
         }
 
-        $template = SchoolFormTemplate::where('form_code', $formCode)->first();
+        $template = SchoolFormTemplate::where('form_code', $formCode)->current()->first();
 
         if (!$template) {
             return response()->json([
@@ -102,7 +130,8 @@ class SchoolFormTemplateController extends Controller
     }
 
     /**
-     * POST /admin/school-forms/{formCode}/template  (upload or replace)
+     * POST /admin/school-forms/{formCode}/template  (upload new as current)
+     * Archives any previously current template for this form_code.
      */
     public function store(Request $request, string $formCode): JsonResponse
     {
@@ -123,12 +152,11 @@ class SchoolFormTemplateController extends Controller
                     }
                     $ext = strtolower($value->getClientOriginalExtension());
                     if (!in_array($ext, self::ALLOWED_EXTENSIONS, true)) {
-                        $fail('Only Excel files (.xlsx, .xls) are allowed.');
+                        $fail('The file must be an Excel spreadsheet (.xlsx or .xls).');
                     }
                     $mime = $value->getMimeType();
-                    // Some browsers send application/octet-stream; extension check is primary.
                     if ($mime && !in_array($mime, self::ALLOWED_MIMES, true) && $mime !== 'application/octet-stream') {
-                        $fail('Only Excel files (.xlsx, .xls) are allowed.');
+                        $fail('The file must be a valid Excel spreadsheet.');
                     }
                 },
             ],
@@ -147,37 +175,79 @@ class SchoolFormTemplateController extends Controller
         $directory = 'school-form-templates/' . $formCode;
         $path = $file->storeAs($directory, $storedName, 'public');
 
-        $existing = SchoolFormTemplate::where('form_code', $formCode)->first();
+        $template = DB::transaction(function () use ($formCode, $file, $storedName, $path) {
+            // Lock existing rows for this form to prevent concurrent "current" templates
+            SchoolFormTemplate::where('form_code', $formCode)
+                ->lockForUpdate()
+                ->get();
 
-        if ($existing) {
-            $existing->deleteFile();
-            $existing->update([
-                'original_name' => $file->getClientOriginalName(),
-                'stored_name' => $storedName,
-                'file_path' => $path,
-                'mime_type' => $file->getMimeType(),
-                'file_size' => $file->getSize(),
-            ]);
-            $template = $existing->fresh();
-            $message = 'Template updated successfully.';
-            $status = 200;
-        } else {
-            $template = SchoolFormTemplate::create([
+            SchoolFormTemplate::where('form_code', $formCode)
+                ->where('status', SchoolFormTemplate::STATUS_CURRENT)
+                ->update(['status' => SchoolFormTemplate::STATUS_ARCHIVED]);
+
+            return SchoolFormTemplate::create([
                 'form_code' => $formCode,
                 'original_name' => $file->getClientOriginalName(),
                 'stored_name' => $storedName,
                 'file_path' => $path,
                 'mime_type' => $file->getMimeType(),
                 'file_size' => $file->getSize(),
+                'status' => SchoolFormTemplate::STATUS_CURRENT,
             ]);
-            $message = 'Template uploaded successfully.';
-            $status = 201;
+        });
+
+        return response()->json([
+            'message' => 'Template uploaded successfully.',
+            'template' => $this->formatTemplate($template),
+        ], 201);
+    }
+
+    /**
+     * POST /admin/school-forms/{formCode}/templates/{id}/activate
+     * Make an archived template the current one; archive the previous current.
+     */
+    public function activate(string $formCode, int $id): JsonResponse
+    {
+        $formCode = strtoupper($formCode);
+
+        if (!in_array($formCode, self::ALLOWED_FORM_CODES, true)) {
+            return response()->json(['message' => 'Invalid form code.'], 422);
+        }
+
+        $template = DB::transaction(function () use ($formCode, $id) {
+            SchoolFormTemplate::where('form_code', $formCode)
+                ->lockForUpdate()
+                ->get();
+
+            $target = SchoolFormTemplate::where('form_code', $formCode)
+                ->where('id', $id)
+                ->first();
+
+            if (!$target) {
+                return null;
+            }
+
+            if ($target->status === SchoolFormTemplate::STATUS_CURRENT) {
+                return $target; // already current
+            }
+
+            SchoolFormTemplate::where('form_code', $formCode)
+                ->where('status', SchoolFormTemplate::STATUS_CURRENT)
+                ->update(['status' => SchoolFormTemplate::STATUS_ARCHIVED]);
+
+            $target->update(['status' => SchoolFormTemplate::STATUS_CURRENT]);
+
+            return $target->fresh();
+        });
+
+        if (!$template) {
+            return response()->json(['message' => 'Template not found.'], 404);
         }
 
         return response()->json([
-            'message' => $message,
+            'message' => 'Template activated successfully.',
             'template' => $this->formatTemplate($template),
-        ], $status);
+        ]);
     }
 
     /**
@@ -191,7 +261,7 @@ class SchoolFormTemplateController extends Controller
             return response()->json(['message' => 'Invalid form code.'], 422);
         }
 
-        $template = SchoolFormTemplate::where('form_code', $formCode)->first();
+        $template = SchoolFormTemplate::where('form_code', $formCode)->current()->first();
 
         $filePath = $template?->getAttribute('file_path');
 
@@ -214,8 +284,12 @@ class SchoolFormTemplateController extends Controller
             'file_size' => $template->file_size,
             'file_size_formatted' => $template->formatted_size,
             'mime_type' => $template->mime_type,
+            'status' => $template->status,
+            'status_label' => $template->status === SchoolFormTemplate::STATUS_CURRENT ? 'Current' : 'Archived',
+            'created_at' => $template->created_at?->toIso8601String(),
             'updated_at' => $template->updated_at?->toIso8601String(),
             'last_updated' => $template->updated_at?->format('F j, Y'),
+            'upload_date' => $template->created_at?->format('M. j, Y'),
             'download_url' => url('/api/admin/school-forms/' . $template->form_code . '/template/download'),
         ];
     }
@@ -231,7 +305,7 @@ class SchoolFormTemplateController extends Controller
             return response()->json(['message' => 'Invalid form code.'], 422);
         }
 
-        $template = SchoolFormTemplate::where('form_code', $formCode)->first();
+        $template = SchoolFormTemplate::where('form_code', $formCode)->current()->first();
 
         if (!$template || !Storage::disk('public')->exists($template->file_path)) {
             return response()->json(['message' => 'Template file not found.'], 404);

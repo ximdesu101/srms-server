@@ -10,6 +10,9 @@ class SchoolFormTemplate extends Model
 {
     use HasFactory;
 
+    public const STATUS_CURRENT = 'current';
+    public const STATUS_ARCHIVED = 'archived';
+
     protected $fillable = [
         'form_code',
         'original_name',
@@ -17,6 +20,7 @@ class SchoolFormTemplate extends Model
         'file_path',
         'mime_type',
         'file_size',
+        'status',
     ];
 
     protected function casts(): array
@@ -24,6 +28,27 @@ class SchoolFormTemplate extends Model
         return [
             'file_size' => 'integer',
         ];
+    }
+
+    /**
+     * Scope: only the current (active) template.
+     */
+    public function scopeCurrent($query)
+    {
+        return $query->where('status', self::STATUS_CURRENT);
+    }
+
+    /**
+     * Scope: archived templates.
+     */
+    public function scopeArchived($query)
+    {
+        return $query->where('status', self::STATUS_ARCHIVED);
+    }
+
+    public function isCurrent(): bool
+    {
+        return $this->status === self::STATUS_CURRENT;
     }
 
     /**
