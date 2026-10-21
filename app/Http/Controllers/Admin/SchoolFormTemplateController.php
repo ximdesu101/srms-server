@@ -49,11 +49,17 @@ class SchoolFormTemplateController extends Controller
      */
     public function summary(): JsonResponse
     {
-        $templates = SchoolFormTemplate::query()
+        $currentTemplates = SchoolFormTemplate::query()
             ->current()
             ->whereIn('form_code', self::ALLOWED_FORM_CODES)
             ->get()
             ->keyBy('form_code');
+
+        $templateCounts = SchoolFormTemplate::query()
+            ->whereIn('form_code', self::ALLOWED_FORM_CODES)
+            ->selectRaw('form_code, COUNT(*) as total')
+            ->groupBy('form_code')
+            ->pluck('total', 'form_code');
 
         $approvedCounts = DocumentSubmission::query()
             ->where('status', DocumentSubmission::STATUS_APPROVED)
@@ -65,12 +71,13 @@ class SchoolFormTemplateController extends Controller
 
         $forms = [];
         foreach (self::ALLOWED_FORM_CODES as $code) {
-            $template = $templates->get($code);
+            $template = $currentTemplates->get($code);
+            $count = (int) ($templateCounts[$code] ?? 0);
             $forms[] = [
                 'form_code' => $code,
                 'approved_count' => (int) ($approvedCounts[$code] ?? 0),
-                'template_count' => $template ? 1 : 0,
-                'has_template' => (bool) $template,
+                'template_count' => $count,
+                'has_template' => $count > 0,
                 'last_updated' => $template?->updated_at?->format('M. j, Y'),
                 'last_updated_iso' => $template?->updated_at?->toIso8601String(),
             ];
@@ -170,31 +177,76 @@ class SchoolFormTemplateController extends Controller
         }
 
         $file = $request->file('file');
+
+        // Compute SHA-256 of file contents for duplicate detection
+        $hashContext = hash_init('sha256');
+        $stream = fopen($file->getRealPath(), 'rb');
+        if ($stream === false) {
+            return response()->json(['message' => 'Unable to read uploaded file.'], 422);
+        }
+        hash_update_stream($hashContext, $stream);
+        fclose($stream);
+        $fileHash = hash_final($hashContext);
+
+        // Reject identical file already uploaded for this form (before storing)
+        $duplicate = SchoolFormTemplate::where('form_code', $formCode)
+            ->where('file_hash', $fileHash)
+            ->first();
+        if ($duplicate) {
+            return response()->json([
+                'message' => 'This template has already been uploaded.',
+                'error' => 'duplicate_template',
+            ], 422);
+        }
+
         $extension = strtolower($file->getClientOriginalExtension());
         $storedName = $formCode . '_template_' . Str::uuid() . '.' . $extension;
         $directory = 'school-form-templates/' . $formCode;
         $path = $file->storeAs($directory, $storedName, 'public');
 
-        $template = DB::transaction(function () use ($formCode, $file, $storedName, $path) {
-            // Lock existing rows for this form to prevent concurrent "current" templates
-            SchoolFormTemplate::where('form_code', $formCode)
-                ->lockForUpdate()
-                ->get();
+        try {
+            $template = DB::transaction(function () use ($formCode, $file, $storedName, $path, $fileHash) {
+                // Lock existing rows for this form to prevent concurrent "current" templates
+                SchoolFormTemplate::where('form_code', $formCode)
+                    ->lockForUpdate()
+                    ->get();
 
-            SchoolFormTemplate::where('form_code', $formCode)
-                ->where('status', SchoolFormTemplate::STATUS_CURRENT)
-                ->update(['status' => SchoolFormTemplate::STATUS_ARCHIVED]);
+                // Re-check duplicate under lock (race condition safety)
+                $existing = SchoolFormTemplate::where('form_code', $formCode)
+                    ->where('file_hash', $fileHash)
+                    ->first();
+                if ($existing) {
+                    throw new \RuntimeException('duplicate_template');
+                }
 
-            return SchoolFormTemplate::create([
-                'form_code' => $formCode,
-                'original_name' => $file->getClientOriginalName(),
-                'stored_name' => $storedName,
-                'file_path' => $path,
-                'mime_type' => $file->getMimeType(),
-                'file_size' => $file->getSize(),
-                'status' => SchoolFormTemplate::STATUS_CURRENT,
-            ]);
-        });
+                SchoolFormTemplate::where('form_code', $formCode)
+                    ->where('status', SchoolFormTemplate::STATUS_CURRENT)
+                    ->update(['status' => SchoolFormTemplate::STATUS_ARCHIVED]);
+
+                return SchoolFormTemplate::create([
+                    'form_code' => $formCode,
+                    'original_name' => $file->getClientOriginalName(),
+                    'stored_name' => $storedName,
+                    'file_path' => $path,
+                    'mime_type' => $file->getMimeType(),
+                    'file_size' => $file->getSize(),
+                    'file_hash' => $fileHash,
+                    'status' => SchoolFormTemplate::STATUS_CURRENT,
+                ]);
+            });
+        } catch (\RuntimeException $e) {
+            // Clean up stored file if we rejected due to race-condition duplicate
+            if (Storage::disk('public')->exists($path)) {
+                Storage::disk('public')->delete($path);
+            }
+            if ($e->getMessage() === 'duplicate_template') {
+                return response()->json([
+                    'message' => 'This template has already been uploaded.',
+                    'error' => 'duplicate_template',
+                ], 422);
+            }
+            throw $e;
+        }
 
         return response()->json([
             'message' => 'Template uploaded successfully.',
@@ -247,6 +299,57 @@ class SchoolFormTemplateController extends Controller
         return response()->json([
             'message' => 'Template activated successfully.',
             'template' => $this->formatTemplate($template),
+        ]);
+    }
+
+    /**
+     * DELETE /admin/school-forms/{formCode}/templates/{id}
+     * Delete a template (and its file). If it was current, leave no current
+     * or promote the newest remaining archived template.
+     */
+    public function destroy(string $formCode, int $id): JsonResponse
+    {
+        $formCode = strtoupper($formCode);
+
+        if (!in_array($formCode, self::ALLOWED_FORM_CODES, true)) {
+            return response()->json(['message' => 'Invalid form code.'], 422);
+        }
+
+        $result = DB::transaction(function () use ($formCode, $id) {
+            SchoolFormTemplate::where('form_code', $formCode)
+                ->lockForUpdate()
+                ->get();
+
+            $template = SchoolFormTemplate::where('form_code', $formCode)
+                ->where('id', $id)
+                ->first();
+
+            if (!$template) {
+                return null;
+            }
+
+            $wasCurrent = $template->status === SchoolFormTemplate::STATUS_CURRENT;
+            $template->deleteFile();
+            $template->delete();
+
+            if ($wasCurrent) {
+                $next = SchoolFormTemplate::where('form_code', $formCode)
+                    ->orderByDesc('created_at')
+                    ->first();
+                if ($next) {
+                    $next->update(['status' => SchoolFormTemplate::STATUS_CURRENT]);
+                }
+            }
+
+            return true;
+        });
+
+        if ($result === null) {
+            return response()->json(['message' => 'Template not found.'], 404);
+        }
+
+        return response()->json([
+            'message' => 'Template deleted successfully.',
         ]);
     }
 

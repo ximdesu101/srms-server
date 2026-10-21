@@ -39,6 +39,7 @@ Route::prefix('admin/school-forms')->middleware('auth:admin')->group(function ()
     Route::get('/{formCode}/template', [SchoolFormTemplateController::class, 'show']);
     Route::post('/{formCode}/template', [SchoolFormTemplateController::class, 'store']);
     Route::post('/{formCode}/templates/{id}/activate', [SchoolFormTemplateController::class, 'activate']);
+    Route::delete('/{formCode}/templates/{id}', [SchoolFormTemplateController::class, 'destroy']);
     Route::get('/{formCode}/template/download', [SchoolFormTemplateController::class, 'download']);
     Route::get('/{formCode}/template/preview', [SchoolFormTemplateController::class, 'preview']);
 });
