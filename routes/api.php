@@ -44,6 +44,19 @@ Route::prefix('admin/school-forms')->middleware('auth:admin')->group(function ()
     Route::get('/{formCode}/template/preview', [SchoolFormTemplateController::class, 'preview']);
 });
 
+// Administrative form templates (reuse same controller + storage logic; distinct summary)
+Route::prefix('admin/admin-forms')->middleware('auth:admin')->group(function () {
+    Route::get('/summary', [SchoolFormTemplateController::class, 'adminSummary']);
+    // Template CRUD shares the same endpoints under school-forms/{formCode} for codes DTR, ACR, etc.
+    Route::get('/{formCode}/templates', [SchoolFormTemplateController::class, 'index']);
+    Route::get('/{formCode}/template', [SchoolFormTemplateController::class, 'show']);
+    Route::post('/{formCode}/template', [SchoolFormTemplateController::class, 'store']);
+    Route::post('/{formCode}/templates/{id}/activate', [SchoolFormTemplateController::class, 'activate']);
+    Route::delete('/{formCode}/templates/{id}', [SchoolFormTemplateController::class, 'destroy']);
+    Route::get('/{formCode}/template/download', [SchoolFormTemplateController::class, 'download']);
+    Route::get('/{formCode}/template/preview', [SchoolFormTemplateController::class, 'preview']);
+});
+
 // Admin submission requests
 Route::prefix('admin/submission-requests')->middleware('auth:admin')->group(function () {
     Route::get('/metrics', [AdminSubmissionRequestController::class, 'metrics']);

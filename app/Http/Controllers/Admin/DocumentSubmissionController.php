@@ -51,9 +51,10 @@ class DocumentSubmissionController extends Controller
         }
 
         if ($documentCode) {
-            $documentCode = strtoupper(trim((string) $documentCode));
+            // Requests store lowercase codes (sf1, dtr); templates/UI may pass SF1 / DTR
+            $documentCode = strtolower(trim((string) $documentCode));
             $query->whereHas('submissionRequest', function ($rq) use ($documentCode) {
-                $rq->where('document_code', $documentCode);
+                $rq->whereRaw('LOWER(document_code) = ?', [$documentCode]);
             });
         }
 

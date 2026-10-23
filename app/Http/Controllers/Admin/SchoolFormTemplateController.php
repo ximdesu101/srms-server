@@ -21,7 +21,8 @@ use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 
 class SchoolFormTemplateController extends Controller
 {
-    private const ALLOWED_FORM_CODES = [
+    /** School Forms (DepEd SF1–SF10) */
+    private const SCHOOL_FORM_CODES = [
         'SF1',
         'SF2',
         'SF3',
@@ -34,6 +35,40 @@ class SchoolFormTemplateController extends Controller
         'SF10',
     ];
 
+    /** Administrative form codes (aligned with SubmissionRequestController DOCUMENT_MAP keys, uppercased) */
+    private const ADMIN_FORM_CODES = [
+        'DTR',
+        'ACR',
+        'DPDS',
+        'TO',
+        'LF',
+        'SO',
+        'SNSED',
+        'TRANSMITTAL',
+    ];
+
+    /** All form codes that may have templates */
+    private const ALLOWED_FORM_CODES = [
+        'SF1',
+        'SF2',
+        'SF3',
+        'SF4',
+        'SF5',
+        'SF6',
+        'SF7',
+        'SF8',
+        'SF9',
+        'SF10',
+        'DTR',
+        'ACR',
+        'DPDS',
+        'TO',
+        'LF',
+        'SO',
+        'SNSED',
+        'TRANSMITTAL',
+    ];
+
     private const ALLOWED_MIMES = [
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'application/vnd.ms-excel',
@@ -44,38 +79,69 @@ class SchoolFormTemplateController extends Controller
 
     /**
      * GET /admin/school-forms/summary
-     * Returns per-form approved file counts and template metadata for the School Forms cards.
-     * Uses the current (active) template only.
+     * Returns per-form approved file counts and template metadata for School Forms cards (SF1–SF10).
      */
     public function summary(): JsonResponse
     {
+        return response()->json([
+            'forms' => $this->buildFormSummary(self::SCHOOL_FORM_CODES),
+        ]);
+    }
+
+    /**
+     * GET /admin/admin-forms/summary
+     * Returns per-form approved file counts and template metadata for Administrative Forms cards.
+     */
+    public function adminSummary(): JsonResponse
+    {
+        return response()->json([
+            'forms' => $this->buildFormSummary(self::ADMIN_FORM_CODES),
+        ]);
+    }
+
+    /**
+     * Build summary metrics for a given list of form codes.
+     * Matches document_code case-insensitively (requests store lowercase; templates use uppercase).
+     *
+     * @param  array<int, string>  $formCodes
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildFormSummary(array $formCodes): array
+    {
         $currentTemplates = SchoolFormTemplate::query()
             ->current()
-            ->whereIn('form_code', self::ALLOWED_FORM_CODES)
+            ->whereIn('form_code', $formCodes)
             ->get()
             ->keyBy('form_code');
 
         $templateCounts = SchoolFormTemplate::query()
-            ->whereIn('form_code', self::ALLOWED_FORM_CODES)
+            ->whereIn('form_code', $formCodes)
             ->selectRaw('form_code, COUNT(*) as total')
             ->groupBy('form_code')
             ->pluck('total', 'form_code');
 
-        $approvedCounts = DocumentSubmission::query()
+        $lowerCodes = array_map('strtolower', $formCodes);
+
+        $approvedRows = DocumentSubmission::query()
             ->where('status', DocumentSubmission::STATUS_APPROVED)
             ->join('submission_requests', 'document_submissions.submission_request_id', '=', 'submission_requests.id')
-            ->whereIn('submission_requests.document_code', self::ALLOWED_FORM_CODES)
-            ->selectRaw('submission_requests.document_code as document_code, COUNT(document_submissions.id) as total')
-            ->groupBy('submission_requests.document_code')
+            ->where(function ($q) use ($lowerCodes) {
+                foreach ($lowerCodes as $code) {
+                    $q->orWhereRaw('LOWER(submission_requests.document_code) = ?', [$code]);
+                }
+            })
+            ->selectRaw('LOWER(submission_requests.document_code) as document_code, COUNT(document_submissions.id) as total')
+            ->groupBy(DB::raw('LOWER(submission_requests.document_code)'))
             ->pluck('total', 'document_code');
 
         $forms = [];
-        foreach (self::ALLOWED_FORM_CODES as $code) {
+        foreach ($formCodes as $code) {
             $template = $currentTemplates->get($code);
             $count = (int) ($templateCounts[$code] ?? 0);
+            $approved = (int) ($approvedRows[strtolower($code)] ?? 0);
             $forms[] = [
                 'form_code' => $code,
-                'approved_count' => (int) ($approvedCounts[$code] ?? 0),
+                'approved_count' => $approved,
                 'template_count' => $count,
                 'has_template' => $count > 0,
                 'last_updated' => $template?->updated_at?->format('M. j, Y'),
@@ -83,7 +149,7 @@ class SchoolFormTemplateController extends Controller
             ];
         }
 
-        return response()->json(['forms' => $forms]);
+        return $forms;
     }
 
     /**
