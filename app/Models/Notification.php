@@ -13,6 +13,13 @@ class Notification extends Model
     public const TYPE_DOCUMENT_APPROVED = 'DocumentApproved';
     public const TYPE_DOCUMENT_RESUBMITTED = 'DocumentResubmitted';
 
+    // Teacher-to-Admin document request types
+    public const TYPE_DOCUMENT_REQUEST_SUBMITTED    = 'DocumentRequestSubmitted';
+    public const TYPE_DOCUMENT_REQUEST_ACKNOWLEDGED = 'DocumentRequestAcknowledged';
+    public const TYPE_DOCUMENT_REQUEST_PROCESSING   = 'DocumentRequestProcessing';
+    public const TYPE_DOCUMENT_REQUEST_FULFILLED    = 'DocumentRequestFulfilled';
+    public const TYPE_DOCUMENT_REQUEST_UNAVAILABLE  = 'DocumentRequestUnavailable';
+
     protected $fillable = [
         'notifiable_type',
         'notifiable_id',

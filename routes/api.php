@@ -1,11 +1,14 @@
 <?php
 
+use App\Http\Controllers\Admin\DocumentRequestController as AdminDocumentRequestController;
 use App\Http\Controllers\Admin\DocumentSubmissionController;
+use App\Http\Controllers\Admin\NotificationController as AdminNotificationController;
 use App\Http\Controllers\Admin\SchoolFormTemplateController;
 use App\Http\Controllers\Admin\SubmissionRequestController as AdminSubmissionRequestController;
 use App\Http\Controllers\Admin\TeacherController;
 use App\Http\Controllers\Auth\AdminAuthController;
 use App\Http\Controllers\Auth\TeacherAuthController;
+use App\Http\Controllers\Teacher\DocumentRequestController as TeacherDocumentRequestController;
 use App\Http\Controllers\Teacher\NotificationController as TeacherNotificationController;
 use App\Http\Controllers\Teacher\SubmissionRequestController as TeacherSubmissionRequestController;
 use Illuminate\Support\Facades\Route;
@@ -104,4 +107,33 @@ Route::prefix('teacher')->group(function () {
         Route::post('/notifications/{notification}/read', [TeacherNotificationController::class, 'markAsRead']);
         Route::post('/notifications/mark-all-read', [TeacherNotificationController::class, 'markAllAsRead']);
     });
+});
+
+// Admin document requests (teacher-initiated requests for documents)
+Route::prefix('admin/document-requests')->middleware('auth:admin')->group(function () {
+    Route::get('/metrics', [AdminDocumentRequestController::class, 'metrics']);
+    Route::get('/', [AdminDocumentRequestController::class, 'index']);
+    Route::get('/{documentRequest}', [AdminDocumentRequestController::class, 'show']);
+    Route::post('/{documentRequest}/acknowledge', [AdminDocumentRequestController::class, 'acknowledge']);
+    Route::post('/{documentRequest}/processing', [AdminDocumentRequestController::class, 'markProcessing']);
+    Route::post('/{documentRequest}/fulfill', [AdminDocumentRequestController::class, 'fulfill']);
+    Route::post('/{documentRequest}/unavailable', [AdminDocumentRequestController::class, 'markUnavailable']);
+    Route::post('/{documentRequest}/cancel', [AdminDocumentRequestController::class, 'cancel']);
+    Route::get('/{documentRequest}/download', [AdminDocumentRequestController::class, 'download']);
+});
+
+// Admin notifications
+Route::prefix('admin/notifications')->middleware('auth:admin')->group(function () {
+    Route::get('/', [AdminNotificationController::class, 'index']);
+    Route::get('/unread-count', [AdminNotificationController::class, 'unreadCount']);
+    Route::post('/{notification}/read', [AdminNotificationController::class, 'markAsRead']);
+    Route::post('/mark-all-read', [AdminNotificationController::class, 'markAllAsRead']);
+});
+
+// Teacher document requests (teacher submits requests to admin for documents)
+Route::prefix('teacher/document-requests')->middleware('auth:teacher')->group(function () {
+    Route::get('/', [TeacherDocumentRequestController::class, 'index']);
+    Route::post('/', [TeacherDocumentRequestController::class, 'store']);
+    Route::get('/{documentRequest}', [TeacherDocumentRequestController::class, 'show']);
+    Route::post('/{documentRequest}/cancel', [TeacherDocumentRequestController::class, 'cancel']);
 });
