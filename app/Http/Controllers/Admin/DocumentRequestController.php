@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Admin\DocumentRequest;
+use App\Models\AuditLog;
 use App\Models\Notification;
+use App\Services\AuditLogService;
 use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -131,13 +133,23 @@ class DocumentRequestController extends Controller
                         'request_id'    => $documentRequest->id,
                         'request_code'  => $documentRequest->request_code,
                         'document_name' => $documentRequest->document_name,
-                        'link'          => '/document-requests/' . $documentRequest->id,
+                        'link'          => '/document-requests',
                     ]
                 );
             }
         });
 
         $documentRequest->load(['teacher:id,teacher_id,first_name,middle_name,last_name,suffix,username,position,class_advisory']);
+
+        AuditLogService::log(
+            actor: $request->user('admin'),
+            role: AuditLog::ROLE_ADMIN,
+            action: AuditLog::ACT_DOC_REQ_ACKNOWLEDGED,
+            category: AuditLog::CAT_DOC_REQUESTS,
+            description: 'Admin acknowledged document request ' . $documentRequest->request_code . ' (' . $documentRequest->document_name . ') from teacher "' . ($documentRequest->teacher->username ?? 'unknown') . '".',
+            subject: $documentRequest,
+            subjectLabel: $documentRequest->request_code,
+        );
 
         return response()->json([
             'message' => 'Request acknowledged successfully.',
@@ -179,13 +191,23 @@ class DocumentRequestController extends Controller
                         'request_id'    => $documentRequest->id,
                         'request_code'  => $documentRequest->request_code,
                         'document_name' => $documentRequest->document_name,
-                        'link'          => '/document-requests/' . $documentRequest->id,
+                        'link'          => '/document-requests',
                     ]
                 );
             }
         });
 
         $documentRequest->load(['teacher:id,teacher_id,first_name,middle_name,last_name,suffix,username,position,class_advisory']);
+
+        AuditLogService::log(
+            actor: $request->user('admin'),
+            role: AuditLog::ROLE_ADMIN,
+            action: AuditLog::ACT_DOC_REQ_PROCESSING,
+            category: AuditLog::CAT_DOC_REQUESTS,
+            description: 'Admin marked document request ' . $documentRequest->request_code . ' (' . $documentRequest->document_name . ') as processing.',
+            subject: $documentRequest,
+            subjectLabel: $documentRequest->request_code,
+        );
 
         return response()->json([
             'message' => 'Request marked as processing.',
@@ -271,7 +293,7 @@ class DocumentRequestController extends Controller
                             'request_id'    => $documentRequest->id,
                             'request_code'  => $documentRequest->request_code,
                             'document_name' => $documentRequest->document_name,
-                            'link'          => '/document-requests/' . $documentRequest->id,
+                            'link'          => '/document-requests',
                         ]
                     );
                 }
@@ -290,6 +312,17 @@ class DocumentRequestController extends Controller
         }
 
         $documentRequest->load(['teacher:id,teacher_id,first_name,middle_name,last_name,suffix,username,position,class_advisory']);
+
+        AuditLogService::log(
+            actor: $request->user('admin'),
+            role: AuditLog::ROLE_ADMIN,
+            action: AuditLog::ACT_DOC_REQ_FULFILLED,
+            category: AuditLog::CAT_DOC_REQUESTS,
+            description: 'Admin fulfilled document request ' . $documentRequest->request_code . ' (' . $documentRequest->document_name . ') — document uploaded for teacher "' . ($documentRequest->teacher->username ?? 'unknown') . '".',
+            subject: $documentRequest,
+            subjectLabel: $documentRequest->request_code,
+            metadata: ['file_name' => $documentRequest->file_original_name],
+        );
 
         return response()->json([
             'message' => 'Request fulfilled successfully.',
@@ -345,13 +378,23 @@ class DocumentRequestController extends Controller
                         'request_code'  => $documentRequest->request_code,
                         'document_name' => $documentRequest->document_name,
                         'admin_message' => $message,
-                        'link'          => '/document-requests/' . $documentRequest->id,
+                        'link'          => '/document-requests',
                     ]
                 );
             }
         });
 
         $documentRequest->load(['teacher:id,teacher_id,first_name,middle_name,last_name,suffix,username,position,class_advisory']);
+
+        AuditLogService::log(
+            actor: $request->user('admin'),
+            role: AuditLog::ROLE_ADMIN,
+            action: AuditLog::ACT_DOC_REQ_UNAVAILABLE,
+            category: AuditLog::CAT_DOC_REQUESTS,
+            description: 'Admin marked document request ' . $documentRequest->request_code . ' (' . $documentRequest->document_name . ') as unavailable.',
+            subject: $documentRequest,
+            subjectLabel: $documentRequest->request_code,
+        );
 
         return response()->json([
             'message' => 'Request marked as unavailable.',
@@ -382,6 +425,16 @@ class DocumentRequestController extends Controller
         ]);
 
         $documentRequest->load(['teacher:id,teacher_id,first_name,middle_name,last_name,suffix,username,position,class_advisory']);
+
+        AuditLogService::log(
+            actor: $request->user('admin'),
+            role: AuditLog::ROLE_ADMIN,
+            action: AuditLog::ACT_DOC_REQ_CANCELLED,
+            category: AuditLog::CAT_DOC_REQUESTS,
+            description: 'Admin cancelled document request ' . $documentRequest->request_code . ' (' . $documentRequest->document_name . ').',
+            subject: $documentRequest,
+            subjectLabel: $documentRequest->request_code,
+        );
 
         return response()->json([
             'message' => 'Request cancelled successfully.',

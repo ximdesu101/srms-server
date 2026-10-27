@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Admin\Teacher;
+use App\Models\AuditLog;
 use App\Services\ActivationCodeService;
+use App\Services\AuditLogService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Validator;
@@ -65,6 +67,16 @@ class TeacherController extends Controller
         ]);
 
         $activationCode = $activationCodes->generateFor($teacher->id);
+
+        AuditLogService::log(
+            actor: $request->user('admin'),
+            role: AuditLog::ROLE_ADMIN,
+            action: AuditLog::ACT_TEACHER_CREATED,
+            category: AuditLog::CAT_USER_MGMT,
+            description: 'Admin created teacher account for "' . trim($teacher->first_name . ' ' . $teacher->last_name) . '" (' . $teacher->teacher_id . ').',
+            subject: $teacher,
+            subjectLabel: $teacher->teacher_id,
+        );
 
         return response()->json([
             'message' => 'Teacher account created successfully',
@@ -151,6 +163,16 @@ class TeacherController extends Controller
             'class_advisory' => $data['classAdvisory'],
         ]);
 
+        AuditLogService::log(
+            actor: $request->user('admin'),
+            role: AuditLog::ROLE_ADMIN,
+            action: AuditLog::ACT_TEACHER_UPDATED,
+            category: AuditLog::CAT_USER_MGMT,
+            description: 'Admin updated teacher account for "' . trim($teacher->first_name . ' ' . $teacher->last_name) . '" (' . $teacher->teacher_id . ').',
+            subject: $teacher,
+            subjectLabel: $teacher->teacher_id,
+        );
+
         return response()->json([
             'message' => 'Teacher account updated successfully',
             'teacher' => [
@@ -168,9 +190,21 @@ class TeacherController extends Controller
         ]);
     }
 
-    public function destroy(Teacher $teacher): JsonResponse
+    public function destroy(Request $request, Teacher $teacher): JsonResponse
     {
+        $teacherLabel = $teacher->teacher_id;
+        $teacherName  = trim($teacher->first_name . ' ' . $teacher->last_name);
+
         $teacher->delete();
+
+        AuditLogService::log(
+            actor: $request->user('admin'),
+            role: AuditLog::ROLE_ADMIN,
+            action: AuditLog::ACT_TEACHER_DELETED,
+            category: AuditLog::CAT_USER_MGMT,
+            description: 'Admin deleted teacher account for "' . $teacherName . '" (' . $teacherLabel . ').',
+            subjectLabel: $teacherLabel,
+        );
 
         return response()->json([
             'message' => 'Teacher account deleted successfully',

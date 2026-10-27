@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Admin\SubmissionRequest;
 use App\Models\Admin\Teacher;
+use App\Models\AuditLog;
+use App\Services\AuditLogService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -260,7 +262,7 @@ class SubmissionRequestController extends Controller
                                 'due_date' => $sr->due_date instanceof \DateTimeInterface
                                     ? $sr->due_date->format('Y-m-d')
                                     : $sr->due_date,
-                                'link' => '/submission-requests/' . $sr->id,
+                                'link' => '/submission-requests',
                             ]
                         );
                     }
@@ -280,6 +282,24 @@ class SubmissionRequestController extends Controller
 
         foreach ($created as $sr) {
             $sr->load(['teacher:id,teacher_id,first_name,middle_name,last_name,suffix,username,position,class_advisory,status']);
+        }
+
+        // Audit: log one entry per created request
+        foreach ($created as $sr) {
+            $action      = $isDraft ? AuditLog::ACT_SUBMISSION_REQ_CREATED : AuditLog::ACT_SUBMISSION_REQ_SENT;
+            $description = $isDraft
+                ? 'Admin saved a draft submission request for "' . ($sr->teacher->full_name ?? $sr->teacher->username ?? 'unknown') . '" — ' . $sr->document_name . ' (' . $sr->request_code . ').'
+                : 'Admin sent submission request to "' . ($sr->teacher->full_name ?? $sr->teacher->username ?? 'unknown') . '" for ' . $sr->document_name . ' (' . $sr->request_code . ').';
+
+            AuditLogService::log(
+                actor: $admin,
+                role: AuditLog::ROLE_ADMIN,
+                action: $action,
+                category: AuditLog::CAT_SUBMISSIONS,
+                description: $description,
+                subject: $sr,
+                subjectLabel: $sr->request_code,
+            );
         }
 
         $formatted = array_map(fn (SubmissionRequest $sr) => $this->formatRequest($sr), $created);
@@ -407,7 +427,7 @@ class SubmissionRequestController extends Controller
                             'due_date' => $submissionRequest->due_date
                                 ? date('Y-m-d', strtotime((string) $submissionRequest->due_date))
                                 : null,
-                            'link' => '/submission-requests/' . $submissionRequest->id,
+                            'link' => '/submission-requests',
                         ]
                     );
                 }
@@ -462,6 +482,16 @@ class SubmissionRequestController extends Controller
         $submissionRequest->save();
 
         $submissionRequest->load(['teacher:id,teacher_id,first_name,middle_name,last_name,suffix,username,position,class_advisory,status']);
+
+        AuditLogService::log(
+            actor: $submissionRequest->admin ?? null,
+            role: AuditLog::ROLE_ADMIN,
+            action: AuditLog::ACT_SUBMISSION_REQ_CANCELLED,
+            category: AuditLog::CAT_SUBMISSIONS,
+            description: 'Submission request ' . $submissionRequest->request_code . ' (' . $submissionRequest->document_name . ') was cancelled.',
+            subject: $submissionRequest,
+            subjectLabel: $submissionRequest->request_code,
+        );
 
         return response()->json([
             'message' => 'Submission request cancelled successfully.',

@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\Admin\Teacher;
 use App\Models\Admin\TeacherActivationCode;
+use App\Models\AuditLog;
+use App\Services\AuditLogService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Hash;
@@ -14,7 +16,6 @@ class TeacherAuthController extends Controller
 {
     /**
      * Look up a pending teacher by their teacher_id.
-     * Returns only the name — used for auto-fill on the activation form.
      */
     public function lookup(string $teacherId): JsonResponse
     {
@@ -36,7 +37,6 @@ class TeacherAuthController extends Controller
 
     /**
      * Activate a teacher account using the one-time activation code.
-     * Sets the password and marks the account as active.
      */
     public function activate(Request $request): JsonResponse
     {
@@ -55,7 +55,6 @@ class TeacherAuthController extends Controller
             ], 422);
         }
 
-        // Find the teacher by teacher_id
         $teacher = Teacher::where('teacher_id', $request->teacherId)->first();
 
         if (! $teacher) {
@@ -64,7 +63,6 @@ class TeacherAuthController extends Controller
             ], 404);
         }
 
-        // Verify first and last name match
         if (
             strtolower($teacher->first_name) !== strtolower($request->firstName) ||
             strtolower($teacher->last_name)  !== strtolower($request->lastName)
@@ -74,14 +72,12 @@ class TeacherAuthController extends Controller
             ], 422);
         }
 
-        // Teacher must still be pending
         if ($teacher->status !== 'pending') {
             return response()->json([
                 'message' => 'This account has already been activated.',
             ], 409);
         }
 
-        // Find a matching unused activation code
         $codeHash = hash('sha256', $request->activationCode);
 
         $activationCode = TeacherActivationCode::where('teacher_id', $teacher->id)
@@ -95,9 +91,8 @@ class TeacherAuthController extends Controller
             ], 422);
         }
 
-        // Activate the account
         $teacher->update([
-            'password'     => $request->password, // cast handles hashing
+            'password'     => $request->password,
             'status'       => 'active',
             'activated_at' => now(),
         ]);
@@ -108,6 +103,16 @@ class TeacherAuthController extends Controller
         ]);
 
         $token = $teacher->createToken('teacher-token')->plainTextToken;
+
+        AuditLogService::log(
+            actor: $teacher,
+            role: AuditLog::ROLE_TEACHER,
+            action: AuditLog::ACT_TEACHER_ACTIVATED,
+            category: AuditLog::CAT_AUTH,
+            description: 'Teacher "' . $teacher->username . '" activated their account.',
+            subject: $teacher,
+            subjectLabel: $teacher->teacher_id,
+        );
 
         return response()->json([
             'message' => 'Account activated successfully.',
@@ -136,6 +141,16 @@ class TeacherAuthController extends Controller
         $teacher = Teacher::where('username', $request->username)->first();
 
         if (! $teacher || ! Hash::check($request->password, $teacher->password)) {
+            AuditLogService::log(
+                actor: null,
+                role: AuditLog::ROLE_TEACHER,
+                action: AuditLog::ACT_TEACHER_LOGIN_FAILED,
+                category: AuditLog::CAT_AUTH,
+                description: 'Failed teacher login attempt for username "' . $request->username . '".',
+                status: AuditLog::STATUS_FAILED,
+                metadata: ['attempted_username' => $request->username],
+            );
+
             return response()->json([
                 'message' => 'Invalid username or password.',
             ], 401);
@@ -147,10 +162,18 @@ class TeacherAuthController extends Controller
             ], 403);
         }
 
-        // Revoke existing tokens to keep only one active session
+        // Revoke existing tokens — one active session per teacher
         $teacher->tokens()->delete();
 
         $token = $teacher->createToken('teacher-token')->plainTextToken;
+
+        AuditLogService::log(
+            actor: $teacher,
+            role: AuditLog::ROLE_TEACHER,
+            action: AuditLog::ACT_TEACHER_LOGIN,
+            category: AuditLog::CAT_AUTH,
+            description: 'Teacher "' . $teacher->username . '" logged in successfully.',
+        );
 
         return response()->json([
             'message' => 'Login successful.',
@@ -174,7 +197,17 @@ class TeacherAuthController extends Controller
      */
     public function logout(Request $request): JsonResponse
     {
-        $request->user('teacher')->currentAccessToken()->delete();
+        $teacher = $request->user('teacher');
+
+        AuditLogService::log(
+            actor: $teacher,
+            role: AuditLog::ROLE_TEACHER,
+            action: AuditLog::ACT_TEACHER_LOGOUT,
+            category: AuditLog::CAT_AUTH,
+            description: 'Teacher "' . $teacher->username . '" logged out.',
+        );
+
+        $teacher->currentAccessToken()->delete();
 
         return response()->json([
             'message' => 'Logout successful.',

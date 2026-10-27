@@ -9,6 +9,7 @@ class DocumentRequest extends Model
 {
     use HasFactory;
 
+    public const STATUS_DRAFT        = 'Draft';
     public const STATUS_PENDING      = 'Pending';
     public const STATUS_ACKNOWLEDGED = 'Acknowledged';
     public const STATUS_PROCESSING   = 'Processing';
@@ -17,6 +18,7 @@ class DocumentRequest extends Model
     public const STATUS_CANCELLED    = 'Cancelled';
 
     public const STATUSES = [
+        self::STATUS_DRAFT,
         self::STATUS_PENDING,
         self::STATUS_ACKNOWLEDGED,
         self::STATUS_PROCESSING,

@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Admin\DocumentSubmission;
 use App\Models\Admin\DocumentSubmissionVersion;
 use App\Models\Admin\SubmissionRequest;
+use App\Models\AuditLog;
 use App\Models\Notification;
+use App\Services\AuditLogService;
 use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -116,6 +118,16 @@ class SubmissionRequestController extends Controller
         $submissionRequest->status = SubmissionRequest::STATUS_ACKNOWLEDGED;
         $submissionRequest->acknowledged_at = Carbon::now();
         $submissionRequest->save();
+
+        AuditLogService::log(
+            actor: $teacher,
+            role: AuditLog::ROLE_TEACHER,
+            action: AuditLog::ACT_SUBMISSION_REQ_ACKNOWLEDGED,
+            category: AuditLog::CAT_SUBMISSIONS,
+            description: 'Teacher "' . $teacher->username . '" acknowledged submission request ' . $submissionRequest->request_code . ' (' . $submissionRequest->document_name . ').',
+            subject: $submissionRequest,
+            subjectLabel: $submissionRequest->request_code,
+        );
 
         return response()->json([
             'message' => 'Request acknowledged successfully.',
@@ -235,7 +247,7 @@ class SubmissionRequestController extends Controller
                             'request_code' => $submissionRequest->request_code,
                             'document_name' => $submissionRequest->document_name,
                             'teacher_name' => $teacher->full_name,
-                            'link' => '/submission/submission-approval',
+                            'link' => '/submission-requests',
                         ]
                     );
                 }
@@ -251,6 +263,16 @@ class SubmissionRequestController extends Controller
         }
 
         $submissionRequest->load(['documentSubmission', 'admin:id,username']);
+
+        AuditLogService::log(
+            actor: $teacher,
+            role: AuditLog::ROLE_TEACHER,
+            action: AuditLog::ACT_SUBMISSION_REQ_SUBMITTED,
+            category: AuditLog::CAT_SUBMISSIONS,
+            description: 'Teacher "' . $teacher->username . '" submitted a document for request ' . $submissionRequest->request_code . ' (' . $submissionRequest->document_name . ').',
+            subject: $submissionRequest,
+            subjectLabel: $submissionRequest->request_code,
+        );
 
         return response()->json([
             'message' => 'Documents submitted successfully.',
@@ -355,7 +377,7 @@ class SubmissionRequestController extends Controller
                             'request_code' => $sr->request_code,
                             'document_name' => $sr->document_name,
                             'teacher_name' => $teacher->full_name,
-                            'link' => '/submission/submission-approval',
+                            'link' => '/submission-requests',
                         ]
                     );
                 }
@@ -374,6 +396,16 @@ class SubmissionRequestController extends Controller
         foreach ($obsoletePaths as $obsoletePath) {
             Storage::disk('public')->delete($obsoletePath);
         }
+
+        AuditLogService::log(
+            actor: $teacher,
+            role: AuditLog::ROLE_TEACHER,
+            action: AuditLog::ACT_SUBMISSION_RESUBMITTED,
+            category: AuditLog::CAT_SUBMISSIONS,
+            description: 'Teacher "' . $teacher->username . '" resubmitted a revised document for submission ' . $documentSubmission->submission_code . '.',
+            subject: $documentSubmission,
+            subjectLabel: $documentSubmission->submission_code,
+        );
 
         return response()->json([
             'message' => 'Revised document submitted successfully.',

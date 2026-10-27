@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Admin\AuditLogController;
+use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DocumentRequestController as AdminDocumentRequestController;
 use App\Http\Controllers\Admin\DocumentSubmissionController;
 use App\Http\Controllers\Admin\NotificationController as AdminNotificationController;
@@ -11,6 +13,7 @@ use App\Http\Controllers\Auth\TeacherAuthController;
 use App\Http\Controllers\Teacher\DocumentRequestController as TeacherDocumentRequestController;
 use App\Http\Controllers\Teacher\NotificationController as TeacherNotificationController;
 use App\Http\Controllers\Teacher\SubmissionRequestController as TeacherSubmissionRequestController;
+use App\Http\Controllers\Teacher\TemplateController as TeacherTemplateController;
 use Illuminate\Support\Facades\Route;
 
 /* ======================== Admin Routes ======================== */
@@ -24,6 +27,19 @@ Route::prefix('admin')->group(function () {
         Route::get('/me', [AdminAuthController::class, 'me']);
         Route::post('/logout', [AdminAuthController::class, 'logout']);
     });
+});
+
+// Admin audit logs
+Route::prefix('admin/audit-logs')->middleware('auth:admin')->group(function () {
+    Route::get('/', [AuditLogController::class, 'index']);
+    Route::get('/meta', [AuditLogController::class, 'meta']);
+});
+
+// Admin dashboard aggregated endpoints
+Route::prefix('admin/dashboard')->middleware('auth:admin')->group(function () {
+    Route::get('/metrics', [DashboardController::class, 'metrics']);
+    Route::get('/monthly-stats', [DashboardController::class, 'monthlyStats']);
+    Route::get('/calendar-events', [DashboardController::class, 'calendarEvents']);
 });
 
 // Admin-managed teacher accounts
@@ -106,6 +122,12 @@ Route::prefix('teacher')->group(function () {
         Route::get('/notifications/unread-count', [TeacherNotificationController::class, 'unreadCount']);
         Route::post('/notifications/{notification}/read', [TeacherNotificationController::class, 'markAsRead']);
         Route::post('/notifications/mark-all-read', [TeacherNotificationController::class, 'markAllAsRead']);
+
+        // Templates (read-only — download only)
+        Route::get('/templates/school-forms', [TeacherTemplateController::class, 'schoolFormsSummary']);
+        Route::get('/templates/admin-forms', [TeacherTemplateController::class, 'adminFormsSummary']);
+        Route::get('/templates/{formCode}', [TeacherTemplateController::class, 'show']);
+        Route::get('/templates/{formCode}/download', [TeacherTemplateController::class, 'download']);
     });
 });
 
@@ -132,8 +154,11 @@ Route::prefix('admin/notifications')->middleware('auth:admin')->group(function (
 
 // Teacher document requests (teacher submits requests to admin for documents)
 Route::prefix('teacher/document-requests')->middleware('auth:teacher')->group(function () {
+    Route::get('/drafts', [TeacherDocumentRequestController::class, 'drafts']);
     Route::get('/', [TeacherDocumentRequestController::class, 'index']);
     Route::post('/', [TeacherDocumentRequestController::class, 'store']);
     Route::get('/{documentRequest}', [TeacherDocumentRequestController::class, 'show']);
     Route::post('/{documentRequest}/cancel', [TeacherDocumentRequestController::class, 'cancel']);
+    Route::post('/{documentRequest}/submit-draft', [TeacherDocumentRequestController::class, 'submitDraft']);
+    Route::delete('/{documentRequest}/draft', [TeacherDocumentRequestController::class, 'deleteDraft']);
 });

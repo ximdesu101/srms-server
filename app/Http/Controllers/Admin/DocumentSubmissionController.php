@@ -146,7 +146,7 @@ class DocumentSubmissionController extends Controller
                         'request_id' => $sr->id,
                         'request_code' => $sr->request_code,
                         'document_name' => $sr->document_name,
-                        'link' => '/submission-requests/' . $sr->id,
+                        'link' => '/submission-requests',
                     ]
                 );
             }
@@ -223,7 +223,7 @@ class DocumentSubmissionController extends Controller
                         'request_code' => $sr->request_code,
                         'document_name' => $sr->document_name,
                         'revision_note' => $note,
-                        'link' => '/submission-requests/' . $sr->id,
+                        'link' => '/submission-requests',
                     ]
                 );
             }
