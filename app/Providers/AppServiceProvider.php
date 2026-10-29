@@ -37,14 +37,12 @@ class AppServiceProvider extends ServiceProvider
             app()->isProduction(),
         );
 
-        Password::defaults(fn (): ?Password => app()->isProduction()
-            ? Password::min(12)
-                ->mixedCase()
-                ->letters()
-                ->numbers()
-                ->symbols()
-                ->uncompromised()
-            : null,
+        // Enforce password complexity offline-safe (no external breach checks).
+        // Min 8 chars, mixed case, number, and special character.
+        Password::defaults(fn (): Password => Password::min(8)
+            ->mixedCase()
+            ->numbers()
+            ->symbols()
         );
     }
 }

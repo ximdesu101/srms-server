@@ -35,14 +35,21 @@ class TeacherController extends Controller
     public function store(Request $request, ActivationCodeService $activationCodes): JsonResponse
     {
         $validator = Validator::make($request->all(), [
-            'teacherId'     => 'required|string|max:50|unique:teachers,teacher_id',
-            'firstName'     => 'required|string|max:100',
-            'middleName'    => 'nullable|string|max:100',
-            'lastName'      => 'required|string|max:100',
-            'suffix'        => 'nullable|in:' . implode(',', self::SUFFIXES),
-            'username'      => 'required|string|max:50|unique:teachers,username',
-            'position'      => 'required|in:' . implode(',', self::POSITIONS),
-            'classAdvisory' => 'required|in:' . implode(',', self::CLASS_ADVISORIES),
+            'teacherId'         => 'required|string|max:50|unique:teachers,teacher_id',
+            'firstName'         => 'required|string|max:100',
+            'middleName'        => 'nullable|string|max:100',
+            'lastName'          => 'required|string|max:100',
+            'suffix'            => 'nullable|in:' . implode(',', self::SUFFIXES),
+            'username'          => 'required|string|max:50|unique:teachers,username',
+            'position'          => 'required|in:' . implode(',', self::POSITIONS),
+            'classAdvisory'     => 'required|in:' . implode(',', self::CLASS_ADVISORIES),
+            'region'            => 'required|string|max:150',
+            'province'          => 'required|string|max:150',
+            'cityMunicipality'  => 'required|string|max:150',
+            'barangay'          => 'required|string|max:150',
+            'contactNumber'     => ['required', 'string', 'max:20', 'regex:/^[\d\s\+\-\(\)]+$/'],
+        ], [
+            'contactNumber.regex' => 'Contact number may only contain digits, spaces, +, -, and parentheses.',
         ]);
 
         if ($validator->fails()) {
@@ -55,15 +62,20 @@ class TeacherController extends Controller
         $data = $validator->validated();
 
         $teacher = Teacher::create([
-            'teacher_id'     => $data['teacherId'],
-            'first_name'     => $data['firstName'],
-            'middle_name'    => $data['middleName'] ?? null,
-            'last_name'      => $data['lastName'],
-            'suffix'         => ($data['suffix'] ?? 'none') === 'none' ? null : $data['suffix'],
-            'username'       => $data['username'],
-            'position'       => $data['position'],
-            'class_advisory' => $data['classAdvisory'],
-            'status'         => 'pending',
+            'teacher_id'         => $data['teacherId'],
+            'first_name'         => $data['firstName'],
+            'middle_name'        => $data['middleName'] ?? null,
+            'last_name'          => $data['lastName'],
+            'suffix'             => ($data['suffix'] ?? 'none') === 'none' ? null : $data['suffix'],
+            'username'           => $data['username'],
+            'position'           => $data['position'],
+            'class_advisory'     => $data['classAdvisory'],
+            'region'             => $data['region'],
+            'province'           => $data['province'] ?? null,
+            'city_municipality'  => $data['cityMunicipality'],
+            'barangay'           => $data['barangay'],
+            'contact_number'     => $data['contactNumber'],
+            'status'             => 'pending',
         ]);
 
         $activationCode = $activationCodes->generateFor($teacher->id);
@@ -81,16 +93,21 @@ class TeacherController extends Controller
         return response()->json([
             'message' => 'Teacher account created successfully',
             'teacher' => [
-                'id'             => $teacher->id,
-                'teacher_id'     => $teacher->teacher_id,
-                'first_name'     => $teacher->first_name,
-                'middle_name'    => $teacher->middle_name,
-                'last_name'      => $teacher->last_name,
-                'suffix'         => $teacher->suffix,
-                'username'       => $teacher->username,
-                'position'       => $teacher->position,
-                'class_advisory' => $teacher->class_advisory,
-                'status'         => $teacher->status,
+                'id'                 => $teacher->id,
+                'teacher_id'         => $teacher->teacher_id,
+                'first_name'         => $teacher->first_name,
+                'middle_name'        => $teacher->middle_name,
+                'last_name'          => $teacher->last_name,
+                'suffix'             => $teacher->suffix,
+                'username'           => $teacher->username,
+                'position'           => $teacher->position,
+                'class_advisory'     => $teacher->class_advisory,
+                'region'             => $teacher->region,
+                'province'           => $teacher->province,
+                'city_municipality'  => $teacher->city_municipality,
+                'barangay'           => $teacher->barangay,
+                'contact_number'     => $teacher->contact_number,
+                'status'             => $teacher->status,
             ],
             'activation_code' => $activationCode,
         ], 201);

@@ -20,6 +20,11 @@ class Teacher extends Authenticatable
         'password',
         'position',
         'class_advisory',
+        'region',
+        'province',
+        'city_municipality',
+        'barangay',
+        'contact_number',
         'status',
         'activated_at',
     ];

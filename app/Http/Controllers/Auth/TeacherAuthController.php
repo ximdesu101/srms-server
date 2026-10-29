@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rules\Password;
 
 class TeacherAuthController extends Controller
 {
@@ -45,7 +46,18 @@ class TeacherAuthController extends Controller
             'firstName'        => 'required|string',
             'lastName'         => 'required|string',
             'activationCode'   => 'required|string',
-            'password'         => 'required|string|min:8|confirmed',
+            'password'         => [
+                'required',
+                'string',
+                Password::min(8)->mixedCase()->numbers()->symbols(),
+                'confirmed',
+            ],
+        ], [
+            'password.min' => 'Password must be at least 8 characters.',
+            'password.mixed' => 'Password must contain at least one uppercase and one lowercase letter.',
+            'password.numbers' => 'Password must contain at least one number.',
+            'password.symbols' => 'Password must contain at least one special character (e.g. ! @ # $ % & *).',
+            'password.confirmed' => 'Password confirmation does not match.',
         ]);
 
         if ($validator->fails()) {
