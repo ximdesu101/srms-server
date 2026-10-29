@@ -209,7 +209,7 @@ class SubmissionRequestController extends Controller
             ], 422);
         }
 
-        $admin = $request->user('admin');
+        $admin = $this->actor($request);
         if (! $admin) {
             return response()->json(['message' => 'Unauthorized.'], 401);
         }
@@ -322,12 +322,14 @@ class SubmissionRequestController extends Controller
      */
     public function update(Request $request, SubmissionRequest $submissionRequest): JsonResponse
     {
-        $admin = $request->user('admin');
+        $admin = $this->actor($request);
         if (! $admin) {
             return response()->json(['message' => 'Unauthorized.'], 401);
         }
 
-        if ((int) $submissionRequest->admin_id !== (int) $admin->id) {
+        // Ownership check only applies to Admin actors (Staff may process operational requests)
+        if ($admin instanceof \App\Models\Admin\Admin
+            && (int) $submissionRequest->admin_id !== (int) $admin->id) {
             return response()->json(['message' => 'You are not authorized to modify this request.'], 403);
         }
 

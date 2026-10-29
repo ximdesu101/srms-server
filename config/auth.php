@@ -52,6 +52,11 @@ return [
             'driver' => 'sanctum',
             'provider' => 'teachers',
         ],
+
+        'staff' => [
+            'driver' => 'sanctum',
+            'provider' => 'staffs',
+        ],
     ],
 
     /*
@@ -85,6 +90,11 @@ return [
         'teachers' => [
             'driver' => 'eloquent',
             'model' => App\Models\Admin\Teacher::class,
+        ],
+
+        'staffs' => [
+            'driver' => 'eloquent',
+            'model' => App\Models\Admin\Staff::class,
         ],
     ],
 

@@ -113,12 +113,12 @@ class DocumentRequestController extends Controller
             ], 422);
         }
 
-        $admin = $request->user('admin');
+        $admin = $this->actor($request);
 
         DB::transaction(function () use ($documentRequest, $admin) {
             $documentRequest->update([
                 'status'          => DocumentRequest::STATUS_ACKNOWLEDGED,
-                'admin_id'        => $admin->id,
+                'admin_id' => ($admin instanceof \App\Models\Admin\Admin ? $admin->id : null),
                 'acknowledged_at' => Carbon::now(),
             ]);
 
@@ -142,7 +142,7 @@ class DocumentRequestController extends Controller
         $documentRequest->load(['teacher:id,teacher_id,first_name,middle_name,last_name,suffix,username,position,class_advisory']);
 
         AuditLogService::log(
-            actor: $request->user('admin'),
+            actor: $this->actor($request),
             role: AuditLog::ROLE_ADMIN,
             action: AuditLog::ACT_DOC_REQ_ACKNOWLEDGED,
             category: AuditLog::CAT_DOC_REQUESTS,
@@ -171,12 +171,12 @@ class DocumentRequestController extends Controller
             ], 422);
         }
 
-        $admin = $request->user('admin');
+        $admin = $this->actor($request);
 
         DB::transaction(function () use ($documentRequest, $admin) {
             $documentRequest->update([
                 'status'   => DocumentRequest::STATUS_PROCESSING,
-                'admin_id' => $admin->id,
+                'admin_id' => ($admin instanceof \App\Models\Admin\Admin ? $admin->id : null),
                 'acknowledged_at' => $documentRequest->acknowledged_at ?? Carbon::now(),
             ]);
 
@@ -200,7 +200,7 @@ class DocumentRequestController extends Controller
         $documentRequest->load(['teacher:id,teacher_id,first_name,middle_name,last_name,suffix,username,position,class_advisory']);
 
         AuditLogService::log(
-            actor: $request->user('admin'),
+            actor: $this->actor($request),
             role: AuditLog::ROLE_ADMIN,
             action: AuditLog::ACT_DOC_REQ_PROCESSING,
             category: AuditLog::CAT_DOC_REQUESTS,
@@ -258,7 +258,7 @@ class DocumentRequestController extends Controller
             ], 422);
         }
 
-        $admin   = $request->user('admin');
+        $admin   = $this->actor($request);
         $file    = $request->file('file');
         $ext     = strtolower($file->getClientOriginalExtension());
         $stored  = Str::uuid()->toString() . '.' . $ext;
@@ -271,7 +271,7 @@ class DocumentRequestController extends Controller
             DB::transaction(function () use ($documentRequest, $admin, $file, $path, $stored, $request) {
                 $documentRequest->update([
                     'status'             => DocumentRequest::STATUS_FULFILLED,
-                    'admin_id'           => $admin->id,
+                    'admin_id' => ($admin instanceof \App\Models\Admin\Admin ? $admin->id : null),
                     'admin_message'      => $request->input('admin_message') ?? null,
                     'file_original_name' => $file->getClientOriginalName(),
                     'file_stored_name'   => $stored,
@@ -314,7 +314,7 @@ class DocumentRequestController extends Controller
         $documentRequest->load(['teacher:id,teacher_id,first_name,middle_name,last_name,suffix,username,position,class_advisory']);
 
         AuditLogService::log(
-            actor: $request->user('admin'),
+            actor: $this->actor($request),
             role: AuditLog::ROLE_ADMIN,
             action: AuditLog::ACT_DOC_REQ_FULFILLED,
             category: AuditLog::CAT_DOC_REQUESTS,
@@ -355,13 +355,13 @@ class DocumentRequestController extends Controller
             ], 422);
         }
 
-        $admin   = $request->user('admin');
+        $admin   = $this->actor($request);
         $message = $validator->validated()['admin_message'];
 
         DB::transaction(function () use ($documentRequest, $admin, $message) {
             $documentRequest->update([
                 'status'          => DocumentRequest::STATUS_UNAVAILABLE,
-                'admin_id'        => $admin->id,
+                'admin_id' => ($admin instanceof \App\Models\Admin\Admin ? $admin->id : null),
                 'admin_message'   => $message,
                 'acknowledged_at' => $documentRequest->acknowledged_at ?? Carbon::now(),
             ]);
@@ -387,7 +387,7 @@ class DocumentRequestController extends Controller
         $documentRequest->load(['teacher:id,teacher_id,first_name,middle_name,last_name,suffix,username,position,class_advisory']);
 
         AuditLogService::log(
-            actor: $request->user('admin'),
+            actor: $this->actor($request),
             role: AuditLog::ROLE_ADMIN,
             action: AuditLog::ACT_DOC_REQ_UNAVAILABLE,
             category: AuditLog::CAT_DOC_REQUESTS,
@@ -416,18 +416,18 @@ class DocumentRequestController extends Controller
             ], 422);
         }
 
-        $admin = $request->user('admin');
+        $admin = $this->actor($request);
 
         $documentRequest->update([
             'status'       => DocumentRequest::STATUS_CANCELLED,
-            'admin_id'     => $admin->id,
+            'admin_id' => ($admin instanceof \App\Models\Admin\Admin ? $admin->id : null),
             'cancelled_at' => Carbon::now(),
         ]);
 
         $documentRequest->load(['teacher:id,teacher_id,first_name,middle_name,last_name,suffix,username,position,class_advisory']);
 
         AuditLogService::log(
-            actor: $request->user('admin'),
+            actor: $this->actor($request),
             role: AuditLog::ROLE_ADMIN,
             action: AuditLog::ACT_DOC_REQ_CANCELLED,
             category: AuditLog::CAT_DOC_REQUESTS,

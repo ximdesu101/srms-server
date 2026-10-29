@@ -36,7 +36,7 @@ Route::prefix('admin/audit-logs')->middleware('auth:admin')->group(function () {
 });
 
 // Admin dashboard aggregated endpoints
-Route::prefix('admin/dashboard')->middleware('auth:admin')->group(function () {
+Route::prefix('admin/dashboard')->middleware('auth:admin,staff')->group(function () {
     Route::get('/metrics', [DashboardController::class, 'metrics']);
     Route::get('/monthly-stats', [DashboardController::class, 'monthlyStats']);
     Route::get('/calendar-events', [DashboardController::class, 'calendarEvents']);
@@ -52,7 +52,7 @@ Route::prefix('admin/teachers')->middleware('auth:admin')->group(function () {
 });
 
 // School form templates (official Excel templates per SF1–SF10)
-Route::prefix('admin/school-forms')->middleware('auth:admin')->group(function () {
+Route::prefix('admin/school-forms')->middleware('auth:admin,staff')->group(function () {
     Route::get('/summary', [SchoolFormTemplateController::class, 'summary']);
     Route::get('/{formCode}/templates', [SchoolFormTemplateController::class, 'index']);
     Route::get('/{formCode}/template', [SchoolFormTemplateController::class, 'show']);
@@ -64,7 +64,7 @@ Route::prefix('admin/school-forms')->middleware('auth:admin')->group(function ()
 });
 
 // Administrative form templates (reuse same controller + storage logic; distinct summary)
-Route::prefix('admin/admin-forms')->middleware('auth:admin')->group(function () {
+Route::prefix('admin/admin-forms')->middleware('auth:admin,staff')->group(function () {
     Route::get('/summary', [SchoolFormTemplateController::class, 'adminSummary']);
     // Template CRUD shares the same endpoints under school-forms/{formCode} for codes DTR, ACR, etc.
     Route::get('/{formCode}/templates', [SchoolFormTemplateController::class, 'index']);
@@ -77,7 +77,7 @@ Route::prefix('admin/admin-forms')->middleware('auth:admin')->group(function () 
 });
 
 // Admin submission requests
-Route::prefix('admin/submission-requests')->middleware('auth:admin')->group(function () {
+Route::prefix('admin/submission-requests')->middleware('auth:admin,staff')->group(function () {
     Route::get('/metrics', [AdminSubmissionRequestController::class, 'metrics']);
     Route::get('/active-teachers', [AdminSubmissionRequestController::class, 'activeTeachers']);
     Route::get('/', [AdminSubmissionRequestController::class, 'index']);
@@ -88,7 +88,7 @@ Route::prefix('admin/submission-requests')->middleware('auth:admin')->group(func
 });
 
 // Admin document submissions (approval)
-Route::prefix('admin/document-submissions')->middleware('auth:admin')->group(function () {
+Route::prefix('admin/document-submissions')->middleware('auth:admin,staff')->group(function () {
     Route::get('/metrics', [DocumentSubmissionController::class, 'metrics']);
     Route::get('/', [DocumentSubmissionController::class, 'index']);
     Route::get('/{documentSubmission}', [DocumentSubmissionController::class, 'show']);
@@ -132,7 +132,7 @@ Route::prefix('teacher')->group(function () {
 });
 
 // Admin document requests (teacher-initiated requests for documents)
-Route::prefix('admin/document-requests')->middleware('auth:admin')->group(function () {
+Route::prefix('admin/document-requests')->middleware('auth:admin,staff')->group(function () {
     Route::get('/metrics', [AdminDocumentRequestController::class, 'metrics']);
     Route::get('/', [AdminDocumentRequestController::class, 'index']);
     Route::get('/{documentRequest}', [AdminDocumentRequestController::class, 'show']);
@@ -145,7 +145,7 @@ Route::prefix('admin/document-requests')->middleware('auth:admin')->group(functi
 });
 
 // Admin notifications
-Route::prefix('admin/notifications')->middleware('auth:admin')->group(function () {
+Route::prefix('admin/notifications')->middleware('auth:admin,staff')->group(function () {
     Route::get('/', [AdminNotificationController::class, 'index']);
     Route::get('/unread-count', [AdminNotificationController::class, 'unreadCount']);
     Route::post('/{notification}/read', [AdminNotificationController::class, 'markAsRead']);
@@ -161,4 +161,28 @@ Route::prefix('teacher/document-requests')->middleware('auth:teacher')->group(fu
     Route::post('/{documentRequest}/cancel', [TeacherDocumentRequestController::class, 'cancel']);
     Route::post('/{documentRequest}/submit-draft', [TeacherDocumentRequestController::class, 'submitDraft']);
     Route::delete('/{documentRequest}/draft', [TeacherDocumentRequestController::class, 'deleteDraft']);
+});
+
+/* ======================== Staff Routes ======================== */
+
+Route::prefix('staff')->group(function () {
+    // Public
+    Route::post('/login', [\App\Http\Controllers\Auth\StaffAuthController::class, 'login']);
+    Route::get('/lookup/{staffId}', [\App\Http\Controllers\Auth\StaffAuthController::class, 'lookup']);
+    Route::post('/activate', [\App\Http\Controllers\Auth\StaffAuthController::class, 'activate']);
+
+    // Protected
+    Route::middleware('auth:staff')->group(function () {
+        Route::get('/me', [\App\Http\Controllers\Auth\StaffAuthController::class, 'me']);
+        Route::post('/logout', [\App\Http\Controllers\Auth\StaffAuthController::class, 'logout']);
+    });
+});
+
+// Admin-managed staff accounts
+Route::prefix('admin/staffs')->middleware('auth:admin')->group(function () {
+    Route::get('/metrics', [\App\Http\Controllers\Admin\StaffController::class, 'metrics']);
+    Route::get('/', [\App\Http\Controllers\Admin\StaffController::class, 'index']);
+    Route::post('/', [\App\Http\Controllers\Admin\StaffController::class, 'store']);
+    Route::put('/{staff}', [\App\Http\Controllers\Admin\StaffController::class, 'update']);
+    Route::delete('/{staff}', [\App\Http\Controllers\Admin\StaffController::class, 'destroy']);
 });

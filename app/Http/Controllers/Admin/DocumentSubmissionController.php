@@ -107,7 +107,7 @@ class DocumentSubmissionController extends Controller
             ], 422);
         }
 
-        $admin = $request->user('admin');
+        $admin = $this->actor($request);
         $versions = $documentSubmission->versions()->get();
         $latestVersion = $versions->sortByDesc('version_number')->first();
         $obsoletePaths = $versions
@@ -187,7 +187,7 @@ class DocumentSubmissionController extends Controller
             ], 422);
         }
 
-        $admin = $request->user('admin');
+        $admin = $this->actor($request);
         $note = $validator->validated()['revisionNote'];
 
         DB::transaction(function () use ($documentSubmission, $admin, $note) {

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Admin\StaffActivationCode;
 use App\Models\Admin\TeacherActivationCode;
 
 class ActivationCodeService
@@ -17,6 +18,25 @@ class ActivationCodeService
 
         TeacherActivationCode::create([
             'teacher_id' => $teacherId,
+            'code_hash' => $hash,
+            'status' => 'unused',
+        ]);
+
+        return $code;
+    }
+
+    public function generateForStaff(int $staffId): string
+    {
+        do {
+            $code = $this->randomCode();
+            $hash = hash('sha256', $code);
+        } while (
+            StaffActivationCode::where('code_hash', $hash)->exists()
+            || TeacherActivationCode::where('code_hash', $hash)->exists()
+        );
+
+        StaffActivationCode::create([
+            'staff_id' => $staffId,
             'code_hash' => $hash,
             'status' => 'unused',
         ]);

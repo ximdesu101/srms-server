@@ -11,7 +11,7 @@ class NotificationController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $admin  = $request->user('admin');
+        $admin  = $this->actor($request);
         $filter = $request->query('filter', 'all'); // all | unread | read
 
         $query = Notification::query()
@@ -36,7 +36,7 @@ class NotificationController extends Controller
 
     public function unreadCount(Request $request): JsonResponse
     {
-        $admin = $request->user('admin');
+        $admin = $this->actor($request);
 
         $count = Notification::query()
             ->where('notifiable_type', get_class($admin))
@@ -49,7 +49,7 @@ class NotificationController extends Controller
 
     public function markAsRead(Request $request, Notification $notification): JsonResponse
     {
-        $admin = $request->user('admin');
+        $admin = $this->actor($request);
 
         if ($notification->notifiable_type !== get_class($admin) || (int) $notification->notifiable_id !== (int) $admin->id) {
             return response()->json(['message' => 'Unauthorized.'], 403);
@@ -65,7 +65,7 @@ class NotificationController extends Controller
 
     public function markAllAsRead(Request $request): JsonResponse
     {
-        $admin = $request->user('admin');
+        $admin = $this->actor($request);
 
         Notification::query()
             ->where('notifiable_type', get_class($admin))
