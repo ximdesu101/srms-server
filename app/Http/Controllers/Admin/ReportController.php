@@ -40,19 +40,61 @@ class ReportController extends Controller
             $groupBy = 'month';
         }
 
+        try {
+            $metrics = $this->reports->getSummaryMetrics($from, $to);
+        } catch (\Throwable $e) {
+            report($e);
+            $metrics = [
+                'teachers' => ['total' => 0, 'active' => 0, 'inactive' => 0, 'pending' => 0],
+                'staff' => ['total' => 0, 'active' => 0, 'inactive' => 0, 'pending' => 0],
+                'school_records' => ['total' => 0, 'current' => 0, 'archived' => 0],
+                'document_requests' => [
+                    'total' => 0, 'pending' => 0, 'acknowledged' => 0, 'processing' => 0,
+                    'fulfilled' => 0, 'unavailable' => 0, 'cancelled' => 0,
+                ],
+                'submission_requests' => [
+                    'total' => 0, 'requested' => 0, 'acknowledged' => 0,
+                    'submitted' => 0, 'overdue' => 0, 'cancelled' => 0,
+                ],
+            ];
+        }
+
+        $charts = [
+            'status_distribution' => [],
+            'request_trends' => [],
+            'most_requested' => [],
+            'account_overview' => ['teachers' => ['active' => 0, 'inactive' => 0, 'pending' => 0], 'staff' => ['active' => 0, 'inactive' => 0, 'pending' => 0]],
+        ];
+
+        try {
+            $charts['status_distribution'] = $this->reports->getRequestStatusDistribution($from, $to);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+        try {
+            $charts['request_trends'] = $this->reports->getRequestTrends($from, $to, $groupBy);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+        try {
+            $charts['most_requested'] = $this->reports->getMostRequestedDocuments($from, $to);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+        try {
+            $charts['account_overview'] = $this->reports->getAccountOverview();
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
         return response()->json([
             'period' => [
                 'from' => $from?->toDateString(),
                 'to' => $to?->toDateString(),
                 'preset' => $request->query('preset', 'all'),
             ],
-            'metrics' => $this->reports->getSummaryMetrics($from, $to),
-            'charts' => [
-                'status_distribution' => $this->reports->getRequestStatusDistribution($from, $to),
-                'request_trends' => $this->reports->getRequestTrends($from, $to, $groupBy),
-                'most_requested' => $this->reports->getMostRequestedDocuments($from, $to),
-                'account_overview' => $this->reports->getAccountOverview(),
-            ],
+            'metrics' => $metrics,
+            'charts' => $charts,
             'generated_at' => now()->toIso8601String(),
         ]);
     }
@@ -60,33 +102,58 @@ class ReportController extends Controller
     public function table(Request $request): JsonResponse
     {
         $type = $request->query('type', 'document_requests');
-        $perPage = min((int) $request->query('per_page', 15), 100);
+        $perPage = min(max((int) $request->query('per_page', 15), 1), 100);
+
+        // Resolve optional date filters from preset/from/to so table matches analytics period
+        $preset = $request->query('preset', 'all');
+        $from = $request->query('from');
+        $to = $request->query('to');
+        try {
+            [$fromDate, $toDate] = $this->reports->resolveDateRange($from, $to, $preset);
+            $from = $fromDate?->toDateString();
+            $to = $toDate?->toDateString();
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
 
         $filters = [
             'status' => $request->query('status'),
             'search' => $request->query('search'),
-            'from' => $request->query('from'),
-            'to' => $request->query('to'),
+            'from' => $from,
+            'to' => $to,
             'document_code' => $request->query('document_code'),
             'category' => $request->query('category'),
         ];
 
-        $data = match ($type) {
-            'teachers' => $this->reports->getTeacherAccountsReport($filters, $perPage),
-            'staff' => $this->reports->getStaffAccountsReport($filters, $perPage),
-            'school_records' => $this->reports->getSchoolRecordsReport($filters, $perPage),
-            'document_requests' => $this->reports->getDocumentRequestsReport($filters, $perPage),
-            'pending_unavailable' => $this->reports->getPendingUnavailableReport($filters, $perPage),
-            'fulfillment' => $this->reports->getFulfillmentReport($filters, $perPage),
-            'activity' => $this->reports->getActivityReport($filters, $perPage),
-            default => $this->reports->getDocumentRequestsReport($filters, $perPage),
-        };
+        try {
+            $data = match ($type) {
+                'teachers' => $this->reports->getTeacherAccountsReport($filters, $perPage),
+                'staff' => $this->reports->getStaffAccountsReport($filters, $perPage),
+                'school_records' => $this->reports->getSchoolRecordsReport($filters, $perPage),
+                'document_requests' => $this->reports->getDocumentRequestsReport($filters, $perPage),
+                'pending_unavailable' => $this->reports->getPendingUnavailableReport($filters, $perPage),
+                'fulfillment' => $this->reports->getFulfillmentReport($filters, $perPage),
+                'activity' => $this->reports->getActivityReport($filters, $perPage),
+                default => $this->reports->getDocumentRequestsReport($filters, $perPage),
+            };
 
-        $data->getCollection()->transform(function ($item) use ($type) {
-            return $this->formatRow($item, $type);
-        });
+            $data->getCollection()->transform(function ($item) use ($type) {
+                return $this->formatRow($item, $type);
+            });
 
-        return response()->json($data);
+            return response()->json($data);
+        } catch (\Throwable $e) {
+            report($e);
+            return response()->json([
+                'message' => 'Failed to load report table data.',
+                'error' => config('app.debug') ? $e->getMessage() : null,
+                'data' => [],
+                'current_page' => 1,
+                'last_page' => 1,
+                'per_page' => $perPage,
+                'total' => 0,
+            ], 500);
+        }
     }
 
     public function meta(): JsonResponse

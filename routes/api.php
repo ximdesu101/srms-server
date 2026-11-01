@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DocumentRequestController as AdminDocumentRequestController;
 use App\Http\Controllers\Admin\DocumentSubmissionController;
 use App\Http\Controllers\Admin\NotificationController as AdminNotificationController;
+use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\SchoolFormTemplateController;
 use App\Http\Controllers\Admin\SubmissionRequestController as AdminSubmissionRequestController;
 use App\Http\Controllers\Admin\TeacherController;
@@ -34,6 +35,15 @@ Route::prefix('admin/audit-logs')->middleware('auth:admin')->group(function () {
     Route::get('/', [AuditLogController::class, 'index']);
     Route::get('/meta', [AuditLogController::class, 'meta']);
 });
+
+// Admin reports
+Route::prefix('admin/reports')->middleware('auth:admin,staff')->group(function () {
+    Route::get('/meta', [ReportController::class, 'meta']);
+    Route::get('/analytics', [ReportController::class, 'analytics']);
+    Route::get('/table', [ReportController::class, 'table']);
+    Route::post('/export', [ReportController::class, 'export']);
+});
+
 
 // Admin dashboard aggregated endpoints
 Route::prefix('admin/dashboard')->middleware('auth:admin,staff')->group(function () {

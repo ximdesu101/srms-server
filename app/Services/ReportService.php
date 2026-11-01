@@ -147,16 +147,27 @@ class ReportService
         $query = DocumentRequest::query();
         $this->applyDateFilter($query, $from, $to);
 
-        // SQLite-compatible period grouping (default driver)
-        $periodExpr = match ($groupBy) {
-            'day' => "strftime('%Y-%m-%d', created_at)",
-            'week' => "strftime('%Y-%W', created_at)",
-            default => "strftime('%Y-%m', created_at)",
-        };
+        $driver = DB::connection()->getDriverName();
+
+        // Use driver-appropriate date formatting (SQLite vs MySQL/MariaDB)
+        if ($driver === 'sqlite') {
+            $periodExpr = match ($groupBy) {
+                'day' => "strftime('%Y-%m-%d', created_at)",
+                'week' => "strftime('%Y-%W', created_at)",
+                default => "strftime('%Y-%m', created_at)",
+            };
+        } else {
+            // MySQL / MariaDB / others with DATE_FORMAT
+            $periodExpr = match ($groupBy) {
+                'day' => "DATE_FORMAT(created_at, '%Y-%m-%d')",
+                'week' => "DATE_FORMAT(created_at, '%x-%v')",
+                default => "DATE_FORMAT(created_at, '%Y-%m')",
+            };
+        }
 
         $rows = $query
             ->select(DB::raw("{$periodExpr} as period"), DB::raw('count(*) as count'))
-            ->groupBy('period')
+            ->groupBy(DB::raw($periodExpr))
             ->orderBy('period')
             ->get();
 
