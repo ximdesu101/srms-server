@@ -45,6 +45,7 @@ class SchoolFormTemplateController extends Controller
         'SO',
         'SNSED',
         'TRANSMITTAL',
+        'SBFP',
     ];
 
     /** All form codes that may have templates */
@@ -67,6 +68,7 @@ class SchoolFormTemplateController extends Controller
         'SO',
         'SNSED',
         'TRANSMITTAL',
+        'SBFP',
     ];
 
     private const ALLOWED_MIMES = [

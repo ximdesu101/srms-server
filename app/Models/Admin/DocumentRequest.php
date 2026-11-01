@@ -46,6 +46,7 @@ class DocumentRequest extends Model
         'so'          => 'Special Order',
         'snsed'       => 'National Simulation Earthquake Drill',
         'transmittal' => 'Transmittal',
+        'sbfp'        => 'SBFP – School-Based Feeding Program',
     ];
 
     protected $fillable = [

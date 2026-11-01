@@ -29,14 +29,14 @@ class TemplateController extends Controller
 
     private const ADMIN_FORM_CODES = [
         'DTR', 'ACR', 'DPDS', 'TO', 'LF',
-        'SO', 'SNSED', 'TRANSMITTAL',
+        'SO', 'SNSED', 'TRANSMITTAL', 'SBFP',
     ];
 
     private const ALLOWED_FORM_CODES = [
         'SF1', 'SF2', 'SF3', 'SF4', 'SF5',
         'SF6', 'SF7', 'SF8', 'SF9', 'SF10',
         'DTR', 'ACR', 'DPDS', 'TO', 'LF',
-        'SO', 'SNSED', 'TRANSMITTAL',
+        'SO', 'SNSED', 'TRANSMITTAL', 'SBFP',
     ];
 
     /**
