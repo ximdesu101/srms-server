@@ -9,12 +9,15 @@ use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\SchoolFormTemplateController;
 use App\Http\Controllers\Admin\SubmissionRequestController as AdminSubmissionRequestController;
 use App\Http\Controllers\Admin\TeacherController;
+use App\Http\Controllers\Admin\StaffController;
 use App\Http\Controllers\Auth\AdminAuthController;
 use App\Http\Controllers\Auth\TeacherAuthController;
 use App\Http\Controllers\Teacher\DocumentRequestController as TeacherDocumentRequestController;
 use App\Http\Controllers\Teacher\NotificationController as TeacherNotificationController;
+use App\Http\Controllers\Teacher\ProfileController as TeacherProfileController;
 use App\Http\Controllers\Teacher\SubmissionRequestController as TeacherSubmissionRequestController;
 use App\Http\Controllers\Teacher\TemplateController as TeacherTemplateController;
+use App\Http\Controllers\Staff\ProfileController as StaffProfileController;
 use Illuminate\Support\Facades\Route;
 
 /* ======================== Admin Routes ======================== */
@@ -57,8 +60,10 @@ Route::prefix('admin/teachers')->middleware('auth:admin')->group(function () {
     Route::get('/metrics', [TeacherController::class, 'metrics']);
     Route::get('/', [TeacherController::class, 'index']);
     Route::post('/', [TeacherController::class, 'store']);
+    Route::get('/{teacher}', [TeacherController::class, 'show']);
     Route::put('/{teacher}', [TeacherController::class, 'update']);
     Route::delete('/{teacher}', [TeacherController::class, 'destroy']);
+    Route::patch('/{teacher}/toggle-status', [TeacherController::class, 'toggleStatus']);
 });
 
 // School form templates (official Excel templates per SF1–SF10)
@@ -119,6 +124,9 @@ Route::prefix('teacher')->group(function () {
     Route::middleware('auth:teacher')->group(function () {
         Route::get('/me', [TeacherAuthController::class, 'me']);
         Route::post('/logout', [TeacherAuthController::class, 'logout']);
+
+        // Teacher profile (self-service)
+        Route::put('/profile', [TeacherProfileController::class, 'update']);
 
         // Teacher submission requests
         Route::get('/submission-requests', [TeacherSubmissionRequestController::class, 'index']);
@@ -185,6 +193,9 @@ Route::prefix('staff')->group(function () {
     Route::middleware('auth:staff')->group(function () {
         Route::get('/me', [\App\Http\Controllers\Auth\StaffAuthController::class, 'me']);
         Route::post('/logout', [\App\Http\Controllers\Auth\StaffAuthController::class, 'logout']);
+
+        // Staff profile (self-service)
+        Route::put('/profile', [StaffProfileController::class, 'update']);
     });
 });
 
@@ -193,6 +204,8 @@ Route::prefix('admin/staffs')->middleware('auth:admin')->group(function () {
     Route::get('/metrics', [\App\Http\Controllers\Admin\StaffController::class, 'metrics']);
     Route::get('/', [\App\Http\Controllers\Admin\StaffController::class, 'index']);
     Route::post('/', [\App\Http\Controllers\Admin\StaffController::class, 'store']);
+    Route::get('/{staff}', [\App\Http\Controllers\Admin\StaffController::class, 'show']);
     Route::put('/{staff}', [\App\Http\Controllers\Admin\StaffController::class, 'update']);
     Route::delete('/{staff}', [\App\Http\Controllers\Admin\StaffController::class, 'destroy']);
+    Route::patch('/{staff}/toggle-status', [\App\Http\Controllers\Admin\StaffController::class, 'toggleStatus']);
 });

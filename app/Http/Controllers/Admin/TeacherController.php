@@ -227,4 +227,85 @@ class TeacherController extends Controller
             'message' => 'Teacher account deleted successfully',
         ]);
     }
+
+    /**
+     * Activate or deactivate a teacher account.
+     * Only active teachers may be deactivated; only inactive ones may be reactivated.
+     * Pending accounts (not yet set up) cannot be toggled.
+     */
+    public function toggleStatus(Request $request, Teacher $teacher): JsonResponse
+    {
+        if ($teacher->status === 'pending') {
+            return response()->json([
+                'message' => 'Cannot change the status of a pending account. The teacher must activate their account first.',
+            ], 422);
+        }
+
+        if ($teacher->status === 'active') {
+            // Deactivate: revoke all tokens so the session is invalidated immediately
+            $teacher->tokens()->delete();
+            $teacher->update(['status' => 'inactive']);
+
+            AuditLogService::log(
+                actor: $request->user('admin'),
+                role: AuditLog::ROLE_ADMIN,
+                action: AuditLog::ACT_TEACHER_DEACTIVATED,
+                category: AuditLog::CAT_USER_MGMT,
+                description: 'Admin deactivated teacher account for "' . trim($teacher->first_name . ' ' . $teacher->last_name) . '" (' . $teacher->teacher_id . ').',
+                subject: $teacher,
+                subjectLabel: $teacher->teacher_id,
+            );
+
+            return response()->json([
+                'message' => 'Teacher account deactivated successfully.',
+                'status'  => 'inactive',
+            ]);
+        }
+
+        // status === 'inactive' → reactivate
+        $teacher->update(['status' => 'active']);
+
+        AuditLogService::log(
+            actor: $request->user('admin'),
+            role: AuditLog::ROLE_ADMIN,
+            action: AuditLog::ACT_TEACHER_REACTIVATED,
+            category: AuditLog::CAT_USER_MGMT,
+            description: 'Admin reactivated teacher account for "' . trim($teacher->first_name . ' ' . $teacher->last_name) . '" (' . $teacher->teacher_id . ').',
+            subject: $teacher,
+            subjectLabel: $teacher->teacher_id,
+        );
+
+        return response()->json([
+            'message' => 'Teacher account activated successfully.',
+            'status'  => 'active',
+        ]);
+    }
+
+    /**
+     * Return the full profile of a teacher for admin viewing.
+     */
+    public function show(Teacher $teacher): JsonResponse
+    {
+        return response()->json([
+            'teacher' => [
+                'id'                => $teacher->id,
+                'teacher_id'        => $teacher->teacher_id,
+                'first_name'        => $teacher->first_name,
+                'middle_name'       => $teacher->middle_name,
+                'last_name'         => $teacher->last_name,
+                'suffix'            => $teacher->suffix,
+                'username'          => $teacher->username,
+                'position'          => $teacher->position,
+                'class_advisory'    => $teacher->class_advisory,
+                'region'            => $teacher->region,
+                'province'          => $teacher->province,
+                'city_municipality' => $teacher->city_municipality,
+                'barangay'          => $teacher->barangay,
+                'contact_number'    => $teacher->contact_number,
+                'status'            => $teacher->status,
+                'activated_at'      => $teacher->activated_at,
+                'created_at'        => $teacher->created_at,
+            ],
+        ]);
+    }
 }

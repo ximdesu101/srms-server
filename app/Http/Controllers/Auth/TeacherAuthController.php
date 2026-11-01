@@ -170,7 +170,9 @@ class TeacherAuthController extends Controller
 
         if ($teacher->status !== 'active') {
             return response()->json([
-                'message' => 'Your account is not yet activated. Please use your activation code first.',
+                'message' => $teacher->status === 'inactive'
+                    ? 'Your account has been deactivated. Please contact the administrator.'
+                    : 'Your account is not yet activated. Please use your activation code first.',
             ], 403);
         }
 
@@ -229,17 +231,22 @@ class TeacherAuthController extends Controller
     private function teacherResource(Teacher $teacher): array
     {
         return [
-            'id'             => $teacher->id,
-            'teacher_id'     => $teacher->teacher_id,
-            'first_name'     => $teacher->first_name,
-            'middle_name'    => $teacher->middle_name,
-            'last_name'      => $teacher->last_name,
-            'suffix'         => $teacher->suffix,
-            'username'       => $teacher->username,
-            'position'       => $teacher->position,
-            'class_advisory' => $teacher->class_advisory,
-            'status'         => $teacher->status,
-            'activated_at'   => $teacher->activated_at,
+            'id'                => $teacher->id,
+            'teacher_id'        => $teacher->teacher_id,
+            'first_name'        => $teacher->first_name,
+            'middle_name'       => $teacher->middle_name,
+            'last_name'         => $teacher->last_name,
+            'suffix'            => $teacher->suffix,
+            'username'          => $teacher->username,
+            'position'          => $teacher->position,
+            'class_advisory'    => $teacher->class_advisory,
+            'region'            => $teacher->region,
+            'province'          => $teacher->province,
+            'city_municipality' => $teacher->city_municipality,
+            'barangay'          => $teacher->barangay,
+            'contact_number'    => $teacher->contact_number,
+            'status'            => $teacher->status,
+            'activated_at'      => $teacher->activated_at,
         ];
     }
 }

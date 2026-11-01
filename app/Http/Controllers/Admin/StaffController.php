@@ -62,7 +62,7 @@ class StaffController extends Controller
         AuditLogService::log(
             actor: $request->user('admin'),
             role: AuditLog::ROLE_ADMIN,
-            action: 'staff.created',
+            action: AuditLog::ACT_STAFF_CREATED,
             category: AuditLog::CAT_USER_MGMT,
             description: 'Admin created staff account for "' . trim($staff->first_name . ' ' . $staff->last_name) . '" (' . $staff->staff_id . ').',
             subject: $staff,
@@ -127,6 +127,7 @@ class StaffController extends Controller
         return response()->json([
             'total'    => Staff::count(),
             'active'   => Staff::where('status', 'active')->count(),
+            'inactive' => Staff::where('status', 'inactive')->count(),
             'pending'  => Staff::where('status', 'pending')->count(),
         ]);
     }
@@ -165,7 +166,7 @@ class StaffController extends Controller
         AuditLogService::log(
             actor: $request->user('admin'),
             role: AuditLog::ROLE_ADMIN,
-            action: 'staff.updated',
+            action: AuditLog::ACT_STAFF_UPDATED,
             category: AuditLog::CAT_USER_MGMT,
             description: 'Admin updated staff account for "' . trim($staff->first_name . ' ' . $staff->last_name) . '" (' . $staff->staff_id . ').',
             subject: $staff,
@@ -198,7 +199,7 @@ class StaffController extends Controller
         AuditLogService::log(
             actor: $request->user('admin'),
             role: AuditLog::ROLE_ADMIN,
-            action: 'staff.deleted',
+            action: AuditLog::ACT_STAFF_DELETED,
             category: AuditLog::CAT_USER_MGMT,
             description: 'Admin deleted staff account for "' . $staffName . '" (' . $staffLabel . ').',
             subjectLabel: $staffLabel,
@@ -206,6 +207,81 @@ class StaffController extends Controller
 
         return response()->json([
             'message' => 'Staff account deleted successfully',
+        ]);
+    }
+
+    /**
+     * Activate or deactivate a staff account.
+     * Only active staff may be deactivated; only inactive staff may be reactivated.
+     * Pending accounts cannot be toggled.
+     */
+    public function toggleStatus(Request $request, Staff $staff): JsonResponse
+    {
+        if ($staff->status === 'pending') {
+            return response()->json([
+                'message' => 'Cannot change the status of a pending account. The staff member must activate their account first.',
+            ], 422);
+        }
+
+        if ($staff->status === 'active') {
+            // Deactivate: revoke all tokens so the session is invalidated immediately
+            $staff->tokens()->delete();
+            $staff->update(['status' => 'inactive']);
+
+            AuditLogService::log(
+                actor: $request->user('admin'),
+                role: AuditLog::ROLE_ADMIN,
+                action: AuditLog::ACT_STAFF_DEACTIVATED,
+                category: AuditLog::CAT_USER_MGMT,
+                description: 'Admin deactivated staff account for "' . trim($staff->first_name . ' ' . $staff->last_name) . '" (' . $staff->staff_id . ').',
+                subject: $staff,
+                subjectLabel: $staff->staff_id,
+            );
+
+            return response()->json([
+                'message' => 'Staff account deactivated successfully.',
+                'status'  => 'inactive',
+            ]);
+        }
+
+        // status === 'inactive' → reactivate
+        $staff->update(['status' => 'active']);
+
+        AuditLogService::log(
+            actor: $request->user('admin'),
+            role: AuditLog::ROLE_ADMIN,
+            action: AuditLog::ACT_STAFF_REACTIVATED,
+            category: AuditLog::CAT_USER_MGMT,
+            description: 'Admin reactivated staff account for "' . trim($staff->first_name . ' ' . $staff->last_name) . '" (' . $staff->staff_id . ').',
+            subject: $staff,
+            subjectLabel: $staff->staff_id,
+        );
+
+        return response()->json([
+            'message' => 'Staff account activated successfully.',
+            'status'  => 'active',
+        ]);
+    }
+
+    /**
+     * Return the full profile of a staff member for admin viewing.
+     */
+    public function show(Staff $staff): JsonResponse
+    {
+        return response()->json([
+            'staff' => [
+                'id'           => $staff->id,
+                'staff_id'     => $staff->staff_id,
+                'first_name'   => $staff->first_name,
+                'middle_name'  => $staff->middle_name,
+                'last_name'    => $staff->last_name,
+                'suffix'       => $staff->suffix,
+                'username'     => $staff->username,
+                'position'     => $staff->position,
+                'status'       => $staff->status,
+                'activated_at' => $staff->activated_at,
+                'created_at'   => $staff->created_at,
+            ],
         ]);
     }
 }

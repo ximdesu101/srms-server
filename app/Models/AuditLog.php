@@ -29,10 +29,28 @@ class AuditLog extends Model
     public const ACT_TEACHER_LOGIN_FAILED = 'teacher.login.failed';
     public const ACT_TEACHER_LOGOUT      = 'teacher.logout';
 
+    // Staff auth
+    public const ROLE_STAFF               = 'Staff';
+    public const ACT_STAFF_LOGIN          = 'staff.login';
+    public const ACT_STAFF_LOGIN_FAILED   = 'staff.login.failed';
+    public const ACT_STAFF_LOGOUT         = 'staff.logout';
+    public const ACT_STAFF_ACTIVATED      = 'staff.activated';
+
     // User management (admin)
-    public const ACT_TEACHER_CREATED     = 'teacher.created';
-    public const ACT_TEACHER_UPDATED     = 'teacher.updated';
-    public const ACT_TEACHER_DELETED     = 'teacher.deleted';
+    public const ACT_TEACHER_CREATED      = 'teacher.created';
+    public const ACT_TEACHER_UPDATED      = 'teacher.updated';
+    public const ACT_TEACHER_DELETED      = 'teacher.deleted';
+    public const ACT_TEACHER_DEACTIVATED  = 'teacher.deactivated';
+    public const ACT_TEACHER_REACTIVATED  = 'teacher.reactivated';
+    public const ACT_STAFF_CREATED        = 'staff.created';
+    public const ACT_STAFF_UPDATED        = 'staff.updated';
+    public const ACT_STAFF_DELETED        = 'staff.deleted';
+    public const ACT_STAFF_DEACTIVATED    = 'staff.deactivated';
+    public const ACT_STAFF_REACTIVATED    = 'staff.reactivated';
+
+    // Profile self-service (teacher / staff)
+    public const ACT_TEACHER_PROFILE_UPDATED = 'teacher.profile_updated';
+    public const ACT_STAFF_PROFILE_UPDATED   = 'staff.profile_updated';
 
     // Submission requests (admin → teacher)
     public const ACT_SUBMISSION_REQ_CREATED   = 'submission_request.created';

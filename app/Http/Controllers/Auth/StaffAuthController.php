@@ -165,7 +165,9 @@ class StaffAuthController extends Controller
 
         if ($staff->status !== 'active') {
             return response()->json([
-                'message' => 'Your account is not yet activated. Please use your activation code first.',
+                'message' => $staff->status === 'inactive'
+                    ? 'Your account has been deactivated. Please contact the administrator.'
+                    : 'Your account is not yet activated. Please use your activation code first.',
             ], 403);
         }
 
