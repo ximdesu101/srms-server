@@ -127,6 +127,8 @@ Route::prefix('teacher')->group(function () {
 
         // Teacher profile (self-service)
         Route::put('/profile', [TeacherProfileController::class, 'update']);
+        Route::post('/profile/avatar', [TeacherProfileController::class, 'uploadAvatar']);
+        Route::delete('/profile/avatar', [TeacherProfileController::class, 'removeAvatar']);
 
         // Teacher submission requests
         Route::get('/submission-requests', [TeacherSubmissionRequestController::class, 'index']);
@@ -196,6 +198,8 @@ Route::prefix('staff')->group(function () {
 
         // Staff profile (self-service)
         Route::put('/profile', [StaffProfileController::class, 'update']);
+        Route::post('/profile/avatar', [StaffProfileController::class, 'uploadAvatar']);
+        Route::delete('/profile/avatar', [StaffProfileController::class, 'removeAvatar']);
     });
 });
 

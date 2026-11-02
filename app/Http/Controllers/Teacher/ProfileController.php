@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Teacher;
 
 use App\Http\Controllers\Controller;
+use App\Models\Admin\Teacher;
 use App\Models\AuditLog;
 use App\Services\AuditLogService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 
 class ProfileController extends Controller
 {
@@ -68,24 +71,115 @@ class ProfileController extends Controller
 
         return response()->json([
             'message' => 'Profile updated successfully.',
-            'teacher' => [
-                'id'                => $teacher->id,
-                'teacher_id'        => $teacher->teacher_id,
-                'first_name'        => $teacher->first_name,
-                'middle_name'       => $teacher->middle_name,
-                'last_name'         => $teacher->last_name,
-                'suffix'            => $teacher->suffix,
-                'username'          => $teacher->username,
-                'position'          => $teacher->position,
-                'class_advisory'    => $teacher->class_advisory,
-                'region'            => $teacher->region,
-                'province'          => $teacher->province,
-                'city_municipality' => $teacher->city_municipality,
-                'barangay'          => $teacher->barangay,
-                'contact_number'    => $teacher->contact_number,
-                'status'            => $teacher->status,
-                'activated_at'      => $teacher->activated_at,
-            ],
+            'teacher' => $this->teacherResource($teacher),
         ]);
+    }
+
+    public function uploadAvatar(Request $request): JsonResponse
+    {
+        /** @var Teacher $teacher */
+        $teacher = $request->user('teacher');
+
+        $validator = Validator::make($request->all(), [
+            'avatar' => [
+                'required',
+                'file',
+                'image',
+                'mimes:jpeg,jpg,png,webp,gif',
+                'max:2048',
+            ],
+        ], [
+            'avatar.required' => 'Please select an image to upload.',
+            'avatar.image'    => 'The file must be an image.',
+            'avatar.mimes'    => 'Only JPEG, PNG, WebP, and GIF images are allowed.',
+            'avatar.max'      => 'Image size must not exceed 2 MB.',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validation failed.',
+                'errors'  => $validator->errors(),
+            ], 422);
+        }
+
+        $file      = $request->file('avatar');
+        $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension());
+        $filename  = 'teacher_' . $teacher->id . '_' . Str::uuid() . '.' . $extension;
+        $path      = $file->storeAs('profile-pictures/teachers', $filename, 'public');
+
+        // Delete the old avatar if one exists
+        if ($teacher->profile_picture && Storage::disk('public')->exists($teacher->profile_picture)) {
+            Storage::disk('public')->delete($teacher->profile_picture);
+        }
+
+        $teacher->update(['profile_picture' => $path]);
+
+        AuditLogService::log(
+            actor: $teacher,
+            role: AuditLog::ROLE_TEACHER,
+            action: AuditLog::ACT_TEACHER_AVATAR_UPDATED,
+            category: AuditLog::CAT_USER_MGMT,
+            description: 'Teacher "' . $teacher->username . '" updated their profile picture.',
+            subject: $teacher,
+            subjectLabel: $teacher->teacher_id,
+        );
+
+        return response()->json([
+            'message' => 'Profile picture updated successfully.',
+            'teacher' => $this->teacherResource($teacher->fresh()),
+        ]);
+    }
+
+    public function removeAvatar(Request $request): JsonResponse
+    {
+        /** @var Teacher $teacher */
+        $teacher = $request->user('teacher');
+
+        if ($teacher->profile_picture) {
+            if (Storage::disk('public')->exists($teacher->profile_picture)) {
+                Storage::disk('public')->delete($teacher->profile_picture);
+            }
+            $teacher->update(['profile_picture' => null]);
+
+            AuditLogService::log(
+                actor: $teacher,
+                role: AuditLog::ROLE_TEACHER,
+                action: AuditLog::ACT_TEACHER_AVATAR_REMOVED,
+                category: AuditLog::CAT_USER_MGMT,
+                description: 'Teacher "' . $teacher->username . '" removed their profile picture.',
+                subject: $teacher,
+                subjectLabel: $teacher->teacher_id,
+            );
+        }
+
+        return response()->json([
+            'message' => 'Profile picture removed successfully.',
+            'teacher' => $this->teacherResource($teacher->fresh()),
+        ]);
+    }
+
+    private function teacherResource(Teacher $teacher): array
+    {
+        return [
+            'id'                => $teacher->id,
+            'teacher_id'        => $teacher->teacher_id,
+            'first_name'        => $teacher->first_name,
+            'middle_name'       => $teacher->middle_name,
+            'last_name'         => $teacher->last_name,
+            'suffix'            => $teacher->suffix,
+            'username'          => $teacher->username,
+            'position'          => $teacher->position,
+            'class_advisory'    => $teacher->class_advisory,
+            'region'            => $teacher->region,
+            'province'          => $teacher->province,
+            'city_municipality' => $teacher->city_municipality,
+            'barangay'          => $teacher->barangay,
+            'contact_number'    => $teacher->contact_number,
+            'profile_picture'   => $teacher->profile_picture
+                ? Storage::disk('public')->url($teacher->profile_picture)
+                : null,
+            'status'            => $teacher->status,
+            'activated_at'      => $teacher->activated_at,
+        ];
     }
 }

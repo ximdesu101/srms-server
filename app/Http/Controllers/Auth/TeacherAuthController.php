@@ -245,6 +245,9 @@ class TeacherAuthController extends Controller
             'city_municipality' => $teacher->city_municipality,
             'barangay'          => $teacher->barangay,
             'contact_number'    => $teacher->contact_number,
+            'profile_picture'   => $teacher->profile_picture
+                ? \Illuminate\Support\Facades\Storage::disk('public')->url($teacher->profile_picture)
+                : null,
             'status'            => $teacher->status,
             'activated_at'      => $teacher->activated_at,
         ];

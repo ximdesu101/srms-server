@@ -51,6 +51,10 @@ class AuditLog extends Model
     // Profile self-service (teacher / staff)
     public const ACT_TEACHER_PROFILE_UPDATED = 'teacher.profile_updated';
     public const ACT_STAFF_PROFILE_UPDATED   = 'staff.profile_updated';
+    public const ACT_TEACHER_AVATAR_UPDATED  = 'teacher.avatar_updated';
+    public const ACT_TEACHER_AVATAR_REMOVED  = 'teacher.avatar_removed';
+    public const ACT_STAFF_AVATAR_UPDATED    = 'staff.avatar_updated';
+    public const ACT_STAFF_AVATAR_REMOVED    = 'staff.avatar_removed';
 
     // Submission requests (admin → teacher)
     public const ACT_SUBMISSION_REQ_CREATED   = 'submission_request.created';

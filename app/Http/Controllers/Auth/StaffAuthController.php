@@ -227,6 +227,9 @@ class StaffAuthController extends Controller
             'suffix'       => $staff->suffix,
             'username'     => $staff->username,
             'position'     => $staff->position,
+            'profile_picture' => $staff->profile_picture
+                ? \Illuminate\Support\Facades\Storage::disk('public')->url($staff->profile_picture)
+                : null,
             'status'       => $staff->status,
             'activated_at' => $staff->activated_at,
         ];

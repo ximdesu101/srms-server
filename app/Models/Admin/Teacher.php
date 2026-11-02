@@ -25,6 +25,7 @@ class Teacher extends Authenticatable
         'city_municipality',
         'barangay',
         'contact_number',
+        'profile_picture',
         'status',
         'activated_at',
     ];
